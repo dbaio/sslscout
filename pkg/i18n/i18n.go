@@ -116,6 +116,12 @@ func (p Printer) ErrorKind(kind string) string {
 	return kind
 }
 
+// MoreInfo is the closing line of an alert, pointing at the hosted dashboard.
+// It is only rendered when a dashboard URL is configured.
+func (p Printer) MoreInfo(url string) string {
+	return fmt.Sprintf(p.c.moreInfo, url)
+}
+
 // Days formats a day count with the right plural: "1 day", "3 days".
 func (p Printer) Days(n int) string { return p.c.days.format(n) }
 
@@ -170,6 +176,7 @@ type catalog struct {
 	subject            plural
 	days               plural
 	dateFormat         string // a Go reference layout, not a strftime pattern
+	moreInfo           string // takes the dashboard URL
 	groupTitles        map[string]string
 	errorKinds         map[string]string
 	lineError          string // domain, kind, message
@@ -189,6 +196,7 @@ var catalogs = map[Lang]catalog{
 		},
 		days:       plural{one: "%d day", other: "%d days"},
 		dateFormat: "2006-01-02",
+		moreInfo:   "Learn more at %s",
 		groupTitles: map[string]string{
 			"error":    "Connection failures",
 			"expired":  "Expired certificates",
@@ -223,6 +231,7 @@ var catalogs = map[Lang]catalog{
 		},
 		days:       plural{one: "%d dia", other: "%d dias"},
 		dateFormat: "02/01/2006",
+		moreInfo:   "Saiba mais em %s",
 		groupTitles: map[string]string{
 			"error":    "Falhas de conexão",
 			"expired":  "Certificados expirados",

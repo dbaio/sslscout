@@ -5,6 +5,7 @@
   "concurrency": 20,
   "retries": 3,
   "language": "en",
+  "dashboard_url": "",
   "slack_webhook_url": "",
   "teams_webhook_url": "",
   "smtp": {

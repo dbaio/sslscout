@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -47,7 +48,12 @@ type Config struct {
 	// Language selects the catalog used for the notification text: "en"
 	// (default) or "pt-BR". It does not affect the CLI output, which is always
 	// English, nor the dashboard, which picks its own language in the browser.
-	Language        string `json:"language"`
+	Language string `json:"language"`
+	// DashboardURL is where the report is published (the nginx vhost, the
+	// GitHub Pages site, whatever serves public/). When set, every alert ends
+	// with a line pointing at it, so whoever reads the alert can jump straight
+	// to the dashboard. Empty means the line is omitted entirely.
+	DashboardURL    string `json:"dashboard_url"`
 	SlackWebhookURL string `json:"slack_webhook_url"`
 	TeamsWebhookURL string `json:"teams_webhook_url"`
 	SMTP            SMTP   `json:"smtp"`
@@ -78,6 +84,10 @@ func (c Config) Timeout() time.Duration {
 	}
 	return time.Duration(c.TimeoutSeconds) * time.Second
 }
+
+// Dashboard returns the configured dashboard URL, trimmed. Empty means no
+// dashboard link should be added to the alerts.
+func (c Config) Dashboard() string { return strings.TrimSpace(c.DashboardURL) }
 
 // Lang returns the notification language, already normalized. An unsupported
 // value never reaches this point: Validate rejects it first.
@@ -117,6 +127,7 @@ const (
 	EnvSMTPUsername = "SSLSCOUT_SMTP_USERNAME"
 	EnvSMTPPassword = "SSLSCOUT_SMTP_PASSWORD"
 	EnvLanguage     = "SSLSCOUT_LANG"
+	EnvDashboardURL = "SSLSCOUT_DASHBOARD_URL"
 )
 
 // ApplyEnv overrides secrets (and the notification language) from the
@@ -136,6 +147,7 @@ func (c *Config) ApplyEnv(getenv func(string) string) {
 	set(&c.SMTP.Username, EnvSMTPUsername)
 	set(&c.SMTP.Password, EnvSMTPPassword)
 	set(&c.Language, EnvLanguage)
+	set(&c.DashboardURL, EnvDashboardURL)
 }
 
 // Validate reports every problem at once instead of dying on the first one.
@@ -165,6 +177,9 @@ func (c Config) Validate() error {
 		problems = append(problems, fmt.Errorf("unsupported language %q (use one of: %s)",
 			c.Language, strings.Join(i18n.SupportedNames(), ", ")))
 	}
+	if err := validateDashboardURL(c.Dashboard()); err != nil {
+		problems = append(problems, err)
+	}
 
 	if c.SMTP.Enabled {
 		if c.SMTP.Host == "" {
@@ -188,4 +203,24 @@ func (c Config) Validate() error {
 	}
 
 	return errors.Join(problems...)
+}
+
+// validateDashboardURL rejects a URL that would end up unclickable in an alert.
+// A relative path or a bare hostname is the common mistake, and it is worth
+// catching at start-up rather than in an alert nobody can follow.
+func validateDashboardURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid dashboard_url %q: %w", raw, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("dashboard_url %q must be an absolute http:// or https:// URL", raw)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("dashboard_url %q has no host", raw)
+	}
+	return nil
 }

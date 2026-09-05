@@ -37,6 +37,9 @@ func TestDefault(t *testing.T) {
 	if c.Lang() != i18n.EN {
 		t.Errorf("default language = %q, want %q — alerts go out in English unless configured", c.Lang(), i18n.EN)
 	}
+	if c.Dashboard() != "" {
+		t.Errorf("there is no default dashboard URL, got %q", c.Dashboard())
+	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("the default configuration should be valid: %v", err)
 	}
@@ -122,6 +125,7 @@ func TestApplyEnvOverridesSecrets(t *testing.T) {
 		EnvTeamsWebhook: "  ", // blank: must not override
 		EnvSMTPPassword: "secret-from-env",
 		EnvLanguage:     "pt-BR",
+		EnvDashboardURL: "https://sslscout.example.com",
 	}
 	cfg := Default()
 	cfg.SlackWebhookURL = "https://hooks.slack/file"
@@ -145,6 +149,48 @@ func TestApplyEnvOverridesSecrets(t *testing.T) {
 	}
 	if cfg.Lang() != i18n.PtBR {
 		t.Errorf("SSLSCOUT_LANG should select the catalog: %q", cfg.Lang())
+	}
+	if cfg.Dashboard() != "https://sslscout.example.com" {
+		t.Errorf("SSLSCOUT_DASHBOARD_URL should reach the config: %q", cfg.Dashboard())
+	}
+}
+
+func TestDashboardURL(t *testing.T) {
+	cfg, _, err := Load(write(t, `{"dashboard_url": "  https://sslscout.example.com/  "}`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("a plain https URL should be accepted: %v", err)
+	}
+	if cfg.Dashboard() != "https://sslscout.example.com/" {
+		t.Errorf("Dashboard() should trim surrounding space: %q", cfg.Dashboard())
+	}
+
+	// An empty URL is the default and means "no link in the alerts".
+	empty := Default()
+	if err := empty.Validate(); err != nil {
+		t.Errorf("an absent dashboard_url must not be an error: %v", err)
+	}
+
+	// A value that would end up unclickable in an alert is rejected at start-up.
+	for _, bad := range []string{
+		"sslscout.example.com",       // no scheme
+		"/reports/sslscout",          // relative path
+		"ftp://sslscout.example.com", // wrong scheme
+		"https://",                   // no host
+		"://sslscout.example.com",    // unparseable
+	} {
+		c := Default()
+		c.DashboardURL = bad
+		err := c.Validate()
+		if err == nil {
+			t.Errorf("dashboard_url %q should be rejected", bad)
+			continue
+		}
+		if !strings.Contains(err.Error(), "dashboard_url") {
+			t.Errorf("the error for %q should name the field: %v", bad, err)
+		}
 	}
 }
 

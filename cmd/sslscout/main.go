@@ -43,21 +43,22 @@ func main() {
 }
 
 type options struct {
-	domains     string
-	config      string
-	out         string
-	timeout     time.Duration
-	concurrency int
-	retries     int
-	threshold   int
-	critical    int
-	lang        string
-	notify      bool
-	serve       string
-	interval    time.Duration
-	failOn      string
-	quiet       bool
-	version     bool
+	domains      string
+	config       string
+	out          string
+	timeout      time.Duration
+	concurrency  int
+	retries      int
+	threshold    int
+	critical     int
+	lang         string
+	dashboardURL string
+	notify       bool
+	serve        string
+	interval     time.Duration
+	failOn       string
+	quiet        bool
+	version      bool
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -76,6 +77,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.IntVar(&o.critical, "critical", defaults.CriticalThresholdDays, "overrides critical_threshold_days")
 	fs.StringVar(&o.lang, "lang", defaults.Language,
 		"language of the notifications: "+strings.Join(i18n.SupportedNames(), "|")+" (the CLI output is always English)")
+	fs.StringVar(&o.dashboardURL, "dashboard-url", defaults.DashboardURL,
+		"public URL where the report is published; alerts link to it (e.g. \"https://sslscout.example.com\")")
 	fs.BoolVar(&o.notify, "notify", true, "send notifications (use -notify=false to turn them off)")
 	fs.StringVar(&o.serve, "serve", "", "after checking, serve the report directory on this address (e.g. \":8080\")")
 	fs.DurationVar(&o.interval, "interval", 0, "re-run the check on this interval (0 = run once)")
@@ -257,6 +260,9 @@ func applyFlags(cfg *config.Config, o options, set map[string]bool) {
 	}
 	if set["lang"] {
 		cfg.Language = o.lang
+	}
+	if set["dashboard-url"] {
+		cfg.DashboardURL = o.dashboardURL
 	}
 }
 

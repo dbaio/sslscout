@@ -54,6 +54,14 @@ it fetches is the `report.json` sitting next to it, by relative path. From that
 JSON it renders the summary per state, one record per monitored domain and the
 time the report was generated.
 
+Rows are ordered by **shortest time left first**, so whatever is closest to
+expiring — or already past it — sits at the top. Rows with no deadline at all
+(a failed connection, say) sink to the bottom, and stay there even when the
+order is reversed: they say nothing about how close anything is to expiring.
+Clicking any column header re-sorts, and clicking the active one flips the
+direction. All of it happens in the browser, so the ordering inside
+`report.json` is irrelevant to what you see.
+
 Because it is a static file, anything can serve it: the built-in `-serve` mode,
 nginx, Apache, GitHub Pages or an object bucket.
 
@@ -151,6 +159,7 @@ sslscout [flags]
 | `-threshold` | int | `15` | Overrides `alert_threshold_days`. Only takes effect when given explicitly. |
 | `-critical` | int | `7` | Overrides `critical_threshold_days`. Only takes effect when given explicitly. |
 | `-lang` | string | `en` | Language of the notifications: `en` or `pt-BR`. Overrides `language`. |
+| `-dashboard-url` | string | (empty) | Public URL where the report is published. When set, every alert ends with a link to it. Overrides `dashboard_url`. |
 | `-notify` | bool | `true` | Sends notifications. Use `-notify=false` to turn them off. |
 | `-serve` | string | (empty) | After checking, serves the report directory on this address (e.g. `:8080`). |
 | `-interval` | duration | `0` | Re-runs the check on this interval. `0` runs once. |
@@ -181,6 +190,11 @@ Notes that matter:
 - `-lang` only changes the **notifications**. The terminal output is always in
   English — it is written for whoever is reading a log, not for whoever
   receives the alert.
+- `-dashboard-url` is the address **your users** reach, not the port the
+  process listens on. Behind a reverse proxy that is
+  `https://sslscout.example.com`, not `http://localhost:8080`. It must be an
+  absolute `http://` or `https://` URL; anything else is rejected at start-up,
+  because a link nobody can follow is worse than no link.
 
 ### Exit codes
 
@@ -210,6 +224,7 @@ which are secrets.
   "concurrency": 20,
   "retries": 3,
   "language": "en",
+  "dashboard_url": "",
   "slack_webhook_url": "",
   "teams_webhook_url": "",
   "smtp": {
@@ -235,6 +250,7 @@ which are secrets.
 | `concurrency` | int | `20` | Simultaneous checks. Equivalent to `-concurrency`. |
 | `retries` | int | `3` | Attempts per domain on transient failures. Equivalent to `-retries`. |
 | `language` | string | `"en"` | Language of the notifications: `en` or `pt-BR`. Equivalent to `-lang`. |
+| `dashboard_url` | string | `""` | Public URL where the report is published. When set, alerts end with a link to it. Empty omits the line. Equivalent to `-dashboard-url`. |
 | `slack_webhook_url` | string | `""` | Slack incoming webhook. Empty disables the channel. |
 | `teams_webhook_url` | string | `""` | Microsoft Teams incoming webhook. Empty disables the channel. |
 | `smtp` | object | — | E-mail configuration (below). |
@@ -273,6 +289,7 @@ a `config.json` with nothing sensitive inside:
 | `SSLSCOUT_SMTP_USERNAME` | `smtp.username` |
 | `SSLSCOUT_SMTP_PASSWORD` | `smtp.password` |
 | `SSLSCOUT_LANG` | `language` |
+| `SSLSCOUT_DASHBOARD_URL` | `dashboard_url` |
 
 Example:
 
@@ -292,6 +309,9 @@ Two things can be translated, and they are chosen independently:
 | --- | --- | --- | --- |
 | The **alerts** (Slack, Teams, e-mail) | whoever runs SSLScout | `language` in `config.json`, `SSLSCOUT_LANG`, or `-lang` | `en` |
 | The **dashboard** | whoever opens the page in a browser | the picker in the header, remembered per browser | `en` |
+
+The dashboard link added by `dashboard_url` is translated too — see
+[Linking back to the dashboard](#linking-back-to-the-dashboard).
 
 Everything else — the terminal output, the flag help, the error messages, the
 `report.json` field names and the CSV export header — is always in English.
@@ -780,6 +800,7 @@ Settings come from `.env` (see
 | --- | --- | --- |
 | `SSLSCOUT_INTERVAL` | `12h` | How often the check re-runs. |
 | `SSLSCOUT_LANG` | `en` | Alert language (`en` or `pt-BR`). |
+| `SSLSCOUT_DASHBOARD_URL` | (empty) | Public URL of the dashboard, linked at the end of every alert. |
 | `TZ` | `UTC` | Time zone of the container log. |
 | `SSLSCOUT_BIND` | `127.0.0.1` | Interface nginx is published on. |
 | `SSLSCOUT_PORT` | `8080` | Published port. |
@@ -922,6 +943,52 @@ anyone, run with `-notify=false` until you are happy with the report.
 
 The alert text is English by default and can be switched to Brazilian
 Portuguese — see [Languages](#languages-i18n).
+
+### Linking back to the dashboard
+
+An alert tells you *what* broke; the dashboard tells you the rest. Set
+`dashboard_url` and every alert closes with a line pointing at it, on all three
+channels:
+
+```sh
+# in config.json
+{ "dashboard_url": "https://sslscout.example.com" }
+
+# or in the environment
+export SSLSCOUT_DASHBOARD_URL=https://sslscout.example.com
+
+# or per run
+./sslscout -dashboard-url https://sslscout.example.com
+```
+
+The line follows the alert language:
+
+```
+en     Learn more at https://sslscout.example.com
+pt-BR  Saiba mais em https://sslscout.example.com
+```
+
+Where it lands on each channel:
+
+| Channel | Placement |
+| --- | --- |
+| Slack | Last line of the message. Slack auto-links the bare URL. |
+| Microsoft Teams | A final section of the card, after the groups. |
+| E-mail | Last line of the plain-text body. |
+
+Give it the address **your users** reach, not the port the process listens on:
+behind the nginx vhost that is `https://sslscout.example.com`, not
+`http://localhost:8080`. It has to be an absolute `http://` or `https://` URL —
+a bare hostname or a relative path is rejected when the configuration is
+loaded, since a link nobody can follow is worse than no link at all:
+
+```
+sslscout: invalid configuration:
+dashboard_url "sslscout.example.com" must be an absolute http:// or https:// URL
+```
+
+Leave `dashboard_url` empty (the default) and the line is omitted entirely —
+no dangling "Learn more at" with nothing after it.
 
 ### Slack
 

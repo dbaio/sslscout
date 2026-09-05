@@ -1,13 +1,16 @@
 package notifier
 
 import (
+	"io"
 	"mime"
+	"mime/quotedprintable"
 	"net/mail"
 	"strings"
 	"testing"
 	"time"
 
 	"sslscout/pkg/config"
+	"sslscout/pkg/i18n"
 )
 
 // Regression for bug #9: the old message carried only "To:" and a raw "Subject:".
@@ -94,6 +97,30 @@ func TestBuildMessageEncodesAccentedSubject(t *testing.T) {
 	}
 	if decoded != subject {
 		t.Errorf("decoded subject = %q, want %q", decoded, subject)
+	}
+}
+
+// A long dashboard_url gets soft-wrapped by quoted-printable. Decoding has to
+// give it back intact, or the link arrives broken in the mail client.
+func TestEmailFooterSurvivesQuotedPrintable(t *testing.T) {
+	url := "https://sslscout.internal.example.com/reports/production/certificates?team=sre&view=expiring&sort=days"
+	p := i18n.For(i18n.PtBR)
+	groups := BuildGroups(p, results())
+	subject := Subject(p, groups)
+	body := RenderPlain(subject, groups, Footer(p, url))
+
+	raw := string(BuildMessage(config.SMTP{From: "a@b.c", To: []string{"d@e.f"}}, subject, body, time.Now()))
+
+	encoded := raw[strings.Index(raw, "\r\n\r\n")+4:]
+	if !strings.Contains(encoded, "=\r\n") {
+		t.Error("this body should have been long enough to be soft-wrapped")
+	}
+	decoded, err := io.ReadAll(quotedprintable.NewReader(strings.NewReader(encoded)))
+	if err != nil {
+		t.Fatalf("the body does not decode: %v", err)
+	}
+	if !strings.Contains(string(decoded), "Saiba mais em "+url) {
+		t.Errorf("the URL did not survive the round trip:\n%s", decoded)
 	}
 }
 

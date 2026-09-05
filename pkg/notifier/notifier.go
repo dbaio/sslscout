@@ -46,20 +46,21 @@ func Notify(cfg config.Config, results []checker.Result) error {
 	}
 
 	subject := Subject(p, groups)
+	footer := Footer(p, cfg.Dashboard())
 	var problems []error
 
 	if cfg.SlackWebhookURL != "" {
-		if err := sendSlack(cfg.SlackWebhookURL, subject, groups); err != nil {
+		if err := sendSlack(cfg.SlackWebhookURL, subject, groups, footer); err != nil {
 			problems = append(problems, fmt.Errorf("slack: %w", err))
 		}
 	}
 	if cfg.TeamsWebhookURL != "" {
-		if err := sendTeams(cfg.TeamsWebhookURL, subject, groups); err != nil {
+		if err := sendTeams(cfg.TeamsWebhookURL, subject, groups, footer); err != nil {
 			problems = append(problems, fmt.Errorf("teams: %w", err))
 		}
 	}
 	if cfg.SMTP.Enabled {
-		if err := sendEmail(cfg.SMTP, subject, RenderPlain(subject, groups)); err != nil {
+		if err := sendEmail(cfg.SMTP, subject, RenderPlain(subject, groups, footer)); err != nil {
 			problems = append(problems, fmt.Errorf("e-mail: %w", err))
 		}
 	}
@@ -127,8 +128,19 @@ func Subject(p i18n.Printer, groups []Group) string {
 	return p.Subject(total)
 }
 
+// Footer is the closing line that points at the hosted dashboard, localized.
+// An empty dashboard URL yields an empty footer, and every channel then omits
+// the line rather than sending a dangling "Learn more at".
+func Footer(p i18n.Printer, dashboardURL string) string {
+	dashboardURL = strings.TrimSpace(dashboardURL)
+	if dashboardURL == "" {
+		return ""
+	}
+	return p.MoreInfo(dashboardURL)
+}
+
 // RenderPlain produces the plain-text version (e-mail).
-func RenderPlain(title string, groups []Group) string {
+func RenderPlain(title string, groups []Group, footer string) string {
 	var b strings.Builder
 	b.WriteString(title)
 	b.WriteString("\n")
@@ -138,11 +150,14 @@ func RenderPlain(title string, groups []Group) string {
 			fmt.Fprintf(&b, "  - %s\n", l)
 		}
 	}
+	if footer != "" {
+		fmt.Fprintf(&b, "\n%s\n", footer)
+	}
 	return b.String()
 }
 
 // RenderSlack produces the mrkdwn text (Slack's dialect: *bold*, not **).
-func RenderSlack(title string, groups []Group) string {
+func RenderSlack(title string, groups []Group, footer string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "🚨 *%s*\n", title)
 	for _, g := range groups {
@@ -150,6 +165,12 @@ func RenderSlack(title string, groups []Group) string {
 		for _, l := range g.Lines {
 			fmt.Fprintf(&b, "• %s\n", escapeSlack(l))
 		}
+	}
+	if footer != "" {
+		// Slack auto-links a bare URL, so no <url|label> wrapper is needed —
+		// but the mrkdwn escaping still applies, or a "&" in a query string
+		// would break the link.
+		fmt.Fprintf(&b, "\n%s\n", escapeSlack(footer))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -174,9 +195,9 @@ func escapeSlack(s string) string {
 
 // --- Slack ---
 
-func sendSlack(webhookURL, title string, groups []Group) error {
+func sendSlack(webhookURL, title string, groups []Group, footer string) error {
 	payload := map[string]any{
-		"text":   RenderSlack(title, groups),
+		"text":   RenderSlack(title, groups, footer),
 		"mrkdwn": true,
 	}
 	return postJSON(webhookURL, payload)
@@ -204,7 +225,7 @@ type teamsSection struct {
 	Markdown      bool   `json:"markdown"`
 }
 
-func sendTeams(webhookURL, title string, groups []Group) error {
+func sendTeams(webhookURL, title string, groups []Group, footer string) error {
 	card := teamsCard{
 		Type:       "MessageCard",
 		Context:    "https://schema.org/extensions",
@@ -223,6 +244,11 @@ func sendTeams(webhookURL, title string, groups []Group) error {
 			Text:          strings.Join(items, "\n\n"),
 			Markdown:      true,
 		})
+	}
+	if footer != "" {
+		// A section of its own, after the groups. The card `text` field would
+		// put it above them, which reads as a header rather than a footer.
+		card.Sections = append(card.Sections, teamsSection{Text: footer, Markdown: true})
 	}
 	return postJSON(webhookURL, card)
 }

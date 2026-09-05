@@ -48,6 +48,9 @@ services:
       # Alert language: en (default) or pt-BR. It overrides "language" in
       # config.json; see the i18n section of the README.
       SSLSCOUT_LANG: ${SSLSCOUT_LANG:-en}
+      # Public URL of the dashboard, added as a link at the end of every alert.
+      # Use the address your users actually reach, not the container port.
+      SSLSCOUT_DASHBOARD_URL: ${SSLSCOUT_DASHBOARD_URL:-}
       # Secrets. Keep them in .env (git-ignored), never in the compose file.
       SSLSCOUT_SLACK_WEBHOOK_URL: ${SSLSCOUT_SLACK_WEBHOOK_URL:-}
       SSLSCOUT_TEAMS_WEBHOOK_URL: ${SSLSCOUT_TEAMS_WEBHOOK_URL:-}

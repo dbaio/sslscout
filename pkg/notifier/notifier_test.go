@@ -176,6 +176,113 @@ func TestNotifySlackPayload(t *testing.T) {
 	if strings.Contains(payload.Text, "**") {
 		t.Error("Slack uses *bold*, not the ** of common markdown")
 	}
+	if strings.Contains(payload.Text, "Learn more") {
+		t.Error("with no dashboard_url there must be no dangling link line")
+	}
+}
+
+const dashboard = "https://sslscout.example.com"
+
+// The dashboard link has to reach all three channels, in the alert language.
+func TestNotifyIncludesTheDashboardLink(t *testing.T) {
+	t.Run("slack", func(t *testing.T) {
+		srv, body, _ := captureServer(t, 200, "ok")
+		cfg := config.Default()
+		cfg.SlackWebhookURL = srv.URL
+		cfg.DashboardURL = dashboard
+		if err := Notify(cfg, results()); err != nil {
+			t.Fatalf("Notify: %v", err)
+		}
+		var payload struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(*body, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasSuffix(payload.Text, "Learn more at "+dashboard) {
+			t.Errorf("the link should close the message:\n%s", payload.Text)
+		}
+	})
+
+	t.Run("teams", func(t *testing.T) {
+		srv, body, _ := captureServer(t, 200, "1")
+		cfg := config.Default()
+		cfg.TeamsWebhookURL = srv.URL
+		cfg.DashboardURL = dashboard
+		if err := Notify(cfg, results()); err != nil {
+			t.Fatalf("Notify: %v", err)
+		}
+		var card map[string]any
+		if err := json.Unmarshal(*body, &card); err != nil {
+			t.Fatal(err)
+		}
+		sections := card["sections"].([]any)
+		// One section per group plus the footer, and the footer comes last.
+		if len(sections) != 6 {
+			t.Fatalf("expected 5 groups + 1 footer section, got %d", len(sections))
+		}
+		last := sections[len(sections)-1].(map[string]any)
+		if last["text"] != "Learn more at "+dashboard {
+			t.Errorf("footer section = %v", last)
+		}
+		if last["activityTitle"] != nil {
+			t.Errorf("the footer section should carry no heading: %v", last["activityTitle"])
+		}
+	})
+
+	t.Run("email body", func(t *testing.T) {
+		p := i18n.For(i18n.EN)
+		groups := BuildGroups(p, results())
+		text := RenderPlain(Subject(p, groups), groups, Footer(p, dashboard))
+		if !strings.HasSuffix(text, "Learn more at "+dashboard+"\n") {
+			t.Errorf("the e-mail body should end with the link:\n%s", text)
+		}
+	})
+
+	t.Run("follows the alert language", func(t *testing.T) {
+		srv, body, _ := captureServer(t, 200, "ok")
+		cfg := config.Default()
+		cfg.SlackWebhookURL = srv.URL
+		cfg.DashboardURL = dashboard
+		cfg.Language = "pt-BR"
+		if err := Notify(cfg, results()); err != nil {
+			t.Fatalf("Notify: %v", err)
+		}
+		var payload struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(*body, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(payload.Text, "Saiba mais em "+dashboard) {
+			t.Errorf("the link line should be translated:\n%s", payload.Text)
+		}
+	})
+}
+
+func TestFooter(t *testing.T) {
+	p := i18n.For(i18n.EN)
+	if got := Footer(p, ""); got != "" {
+		t.Errorf("no URL means no footer, got %q", got)
+	}
+	if got := Footer(p, "   "); got != "" {
+		t.Errorf("a blank URL means no footer, got %q", got)
+	}
+	if got := Footer(p, "  "+dashboard+"  "); got != "Learn more at "+dashboard {
+		t.Errorf("Footer should trim the URL: %q", got)
+	}
+}
+
+// A "&" in a query string has to survive Slack's mrkdwn escaping, or the link
+// arrives broken.
+func TestSlackFooterIsEscaped(t *testing.T) {
+	p := i18n.For(i18n.EN)
+	groups := BuildGroups(p, results())
+	url := "https://example.com/r?a=1&b=2"
+	text := RenderSlack("Title", groups, Footer(p, url))
+	if !strings.Contains(text, "https://example.com/r?a=1&amp;b=2") {
+		t.Errorf("the ampersand should be escaped for mrkdwn:\n%s", text)
+	}
 }
 
 // The configured language must reach the wire, not only BuildGroups.
@@ -334,7 +441,7 @@ func TestEscapeSlack(t *testing.T) {
 func TestRenderPlainHasNoMarkup(t *testing.T) {
 	p := i18n.For(i18n.EN)
 	groups := BuildGroups(p, results())
-	text := RenderPlain("Title", groups)
+	text := RenderPlain("Title", groups, "")
 	// The text may contain a "*" from a wildcard CN, but never markup of ours.
 	if strings.Contains(text, "*Connection") || strings.Contains(text, "**") || strings.Contains(text, "•") {
 		t.Errorf("the e-mail body should carry no markup:\n%s", text)

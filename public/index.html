@@ -1068,7 +1068,9 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
   var report = null;            // normalized report
   var results = [];             // normalized items
   var expanded = new Set();
-  var sortState = { field: 'status', direction: 'desc' };
+  // Default ordering: shortest deadline first, so whatever is closest to
+  // expiring — or already past it — sits at the top of the table.
+  var sortState = { field: 'days', direction: 'asc' };
   var statusFilter = '';
   var searchTerm = '';
   var autoTimer = null;
@@ -1432,32 +1434,60 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
     var locale = LANGS[lang].locale;
     var copy = list.slice();
 
+    function byName(a, b) {
+      return a.domain.localeCompare(b.domain, locale, { numeric: true, sensitivity: 'base' });
+    }
+
     copy.sort(function (a, b) {
+      // A row with no deadline says nothing about how close anything is to
+      // expiring, so on the deadline columns it sinks to the bottom whichever
+      // way the arrow points. That is why this runs before `dir` is applied
+      // instead of being folded into the comparison below.
+      if (field === 'days' || field === 'expires') {
+        var da = hasDeadline(a), db = hasDeadline(b);
+        if (da !== db) return da ? -1 : 1;
+      }
+
       var c = 0;
       if (field === 'domain') {
-        c = a.domain.localeCompare(b.domain, locale, { numeric: true, sensitivity: 'base' });
+        c = byName(a, b);
       } else if (field === 'status') {
-        c = STATUS[a.status].severity - STATUS[b.status].severity;
-        if (c === 0) c = dayValue(a) - dayValue(b);
+        c = compare(STATUS[a.status].severity, STATUS[b.status].severity);
+        if (c === 0) c = compare(dayValue(a), dayValue(b));
       } else if (field === 'days') {
-        c = dayValue(a) - dayValue(b);
+        c = compare(dayValue(a), dayValue(b));
       } else if (field === 'expires') {
-        c = dateValue(a) - dateValue(b);
+        c = compare(dateValue(a), dateValue(b));
       }
-      if (c === 0) c = a.domain.localeCompare(b.domain, locale, { numeric: true, sensitivity: 'base' });
+      if (c === 0) c = byName(a, b);
       return c * dir;
     });
     return copy;
   }
 
-  // Items with no deadline (status=error) always sink to the bottom, in both
-  // directions.
+  /**
+   * Whether the row carries a usable deadline. Same condition the "Time left"
+   * cell uses, so the ordering never disagrees with what is on screen.
+   */
+  function hasDeadline(it) {
+    return it.status !== 'error' && isNumber(it.days) && !!it.expiresAt;
+  }
+
+  // Rows with no deadline count as infinitely far away, so they can never
+  // displace a real one in the status tie-break.
   function dayValue(it) {
-    if (it.status === 'error' || !isNumber(it.days)) return Number.POSITIVE_INFINITY;
-    return it.days;
+    return hasDeadline(it) ? it.days : Number.POSITIVE_INFINITY;
   }
   function dateValue(it) {
     return it.expiresAt ? it.expiresAt.getTime() : Number.POSITIVE_INFINITY;
+  }
+
+  // Subtracting would yield NaN when both sides are Infinity (two rows with no
+  // deadline), and a comparator that returns NaN leaves the order undefined.
+  // Comparing instead of subtracting keeps it well defined.
+  function compare(a, b) {
+    if (a === b) return 0;
+    return a < b ? -1 : 1;
   }
 
   /* ================================================================

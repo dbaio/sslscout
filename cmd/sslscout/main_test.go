@@ -26,6 +26,7 @@ func TestConfigurationPrecedence(t *testing.T) {
 	file.Retries = 7
 	file.TimeoutSeconds = 25
 	file.Language = "pt-BR"
+	file.DashboardURL = "https://from-file.example.com"
 
 	cases := []struct {
 		name        string
@@ -37,24 +38,29 @@ func TestConfigurationPrecedence(t *testing.T) {
 		retries     int
 		timeout     time.Duration
 		lang        i18n.Lang
+		dashboard   string
 	}{
 		{
 			name: "no flags, the file wins",
 			opts: options{threshold: 15, critical: 7, concurrency: 20, retries: 3, timeout: 10 * time.Second, lang: "en"},
 			// values from the file:
 			alert: 30, critical: 7, concurrency: 5, retries: 7, timeout: 25 * time.Second, lang: i18n.PtBR,
+			dashboard: "https://from-file.example.com",
 		},
 		{
 			name:  "the flag wins over the file",
-			flags: map[string]bool{"threshold": true, "concurrency": true, "timeout": true, "lang": true},
-			opts:  options{threshold: 45, critical: 7, concurrency: 100, retries: 3, timeout: 2 * time.Second, lang: "en"},
+			flags: map[string]bool{"threshold": true, "concurrency": true, "timeout": true, "lang": true, "dashboard-url": true},
+			opts: options{threshold: 45, critical: 7, concurrency: 100, retries: 3, timeout: 2 * time.Second,
+				lang: "en", dashboardURL: "https://from-flag.example.com"},
 			alert: 45, critical: 7, concurrency: 100, retries: 7, timeout: 2 * time.Second, lang: i18n.EN,
+			dashboard: "https://from-flag.example.com",
 		},
 		{
 			name:  "sub-second flag",
 			flags: map[string]bool{"timeout": true},
 			opts:  options{timeout: 750 * time.Millisecond},
 			alert: 30, critical: 7, concurrency: 5, retries: 7, timeout: 750 * time.Millisecond, lang: i18n.PtBR,
+			dashboard: "https://from-file.example.com",
 		},
 	}
 
@@ -80,6 +86,9 @@ func TestConfigurationPrecedence(t *testing.T) {
 			}
 			if cfg.Lang() != c.lang {
 				t.Errorf("language = %q, want %q", cfg.Lang(), c.lang)
+			}
+			if cfg.Dashboard() != c.dashboard {
+				t.Errorf("dashboard_url = %q, want %q", cfg.Dashboard(), c.dashboard)
 			}
 		})
 	}
@@ -149,6 +158,7 @@ func TestRunInvalidFlags(t *testing.T) {
 		{"-interval", "-5s"},
 		{"-concurrency", "0"},
 		{"-lang", "klingon"},
+		{"-dashboard-url", "sslscout.example.com"},
 	}
 	for _, args := range cases {
 		var stdout, stderr bytes.Buffer

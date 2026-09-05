@@ -104,6 +104,7 @@ func TestCatalogsAreComplete(t *testing.T) {
 			t.Errorf("%s: missing date format", lang)
 		}
 		for name, s := range map[string]string{
+			"moreInfo":           c.moreInfo,
 			"lineError":          c.lineError,
 			"lineExpired":        c.lineExpired,
 			"lineExpiredNoDate":  c.lineExpiredNoDate,
@@ -150,6 +151,16 @@ func TestLines(t *testing.T) {
 	}
 	if got := pt.GroupTitle("error"); got != "Falhas de conexão" {
 		t.Errorf("pt GroupTitle = %q", got)
+	}
+}
+
+func TestMoreInfo(t *testing.T) {
+	const url = "https://sslscout.example.com"
+	if got := For(EN).MoreInfo(url); got != "Learn more at "+url {
+		t.Errorf("en MoreInfo = %q", got)
+	}
+	if got := For(PtBR).MoreInfo(url); got != "Saiba mais em "+url {
+		t.Errorf("pt-BR MoreInfo = %q", got)
 	}
 }
 
