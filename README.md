@@ -294,7 +294,7 @@ a `config.json` with nothing sensitive inside:
 Example:
 
 ```sh
-export SSLSCOUT_SLACK_WEBHOOK_URL='https://hooks.slack.com/services/T000/B000/xxxx'
+export SSLSCOUT_SLACK_WEBHOOK_URL='https://hooks.slack.com/services/T00000000/B00000000/your-webhook-token'
 export SSLSCOUT_SMTP_PASSWORD='app-password'
 ./sslscout
 ```
@@ -999,19 +999,19 @@ no dangling "Learn more at" with nothing after it.
 3. Click **Add New Webhook to Workspace**, pick the destination channel and
    authorize it.
 4. Copy the generated URL — it looks like
-   `https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX`.
+   `https://hooks.slack.com/services/T00000000/B00000000/your-webhook-token`.
 
 That URL **is** the credential: whoever has it can post to your channel. Prefer
 supplying it through the environment:
 
 ```sh
-export SSLSCOUT_SLACK_WEBHOOK_URL='https://hooks.slack.com/services/T00000000/B00000000/XXXX'
+export SSLSCOUT_SLACK_WEBHOOK_URL='https://hooks.slack.com/services/T00000000/B00000000/your-webhook-token'
 ```
 
 or, in `config.json`:
 
 ```json
-{ "slack_webhook_url": "https://hooks.slack.com/services/T00000000/B00000000/XXXX" }
+{ "slack_webhook_url": "https://hooks.slack.com/services/T00000000/B00000000/your-webhook-token" }
 ```
 
 ### Microsoft Teams
