@@ -15,6 +15,7 @@
 #   ldap.example.com:636       # any service that performs a TLS handshake
 
 google.com
+smtp.fastmail.com:465
 github.com
 expired.badssl.com          # expired certificate  -> status "expired"
 wrong.host.badssl.com       # name does not match  -> status "invalid"
