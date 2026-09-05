@@ -39,14 +39,11 @@ also come with Brazilian Portuguese — see [Languages](#languages-i18n).
 
 ## Dashboard
 
-<!--
-  Placeholder for the screenshot. To produce one:
-    make serve            # brings the dashboard up on http://localhost:8080
-  then save the image as docs/dashboard.png and replace the comment below with:
-    ![SSLScout dashboard](docs/dashboard.png)
--->
+<!-- To refresh this screenshot: `make serve`, open http://localhost:8080 and
+     save the capture over docs/dashboard.png. Use the example domains.txt —
+     a real list would publish your network surface here. -->
 
-_(screenshot pending — see the instructions in the comment in this file)_
+![The SSLScout dashboard: summary cards per state, and the monitored certificates ordered by time left, worst first](docs/dashboard.png)
 
 The dashboard is a single file, `public/index.html`, with no CDN, no remote
 fonts and no external request whatsoever: it works offline, and the only thing
