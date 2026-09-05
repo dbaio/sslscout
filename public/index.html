@@ -417,6 +417,9 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
 .state.failed svg { color: var(--expired-color); }
 
 .footer { text-align: center; color: var(--text-3); font-size: 12.5px; padding-bottom: 28px; }
+.footer a { color: var(--text-2); text-decoration: none; border-bottom: 1px solid var(--border-strong); }
+.footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.footer .sep { margin: 0 7px; color: var(--border-strong); }
 
 /* ---------- Responsive: stacked cards ---------- */
 @media (max-width: 800px) {
@@ -685,7 +688,14 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
     <div class="state" id="state"></div>
   </section>
 
-  <p class="footer" data-i18n="footer">SSLScout — local report, no external dependencies.</p>
+  <p class="footer">
+    <span data-i18n="footer">SSLScout — local report, no external dependencies.</span>
+    <span class="sep" aria-hidden="true">·</span>
+    <!-- The only outbound link on the page, and it is never followed on its
+         own: the dashboard still makes no external request. -->
+    <a href="https://github.com/dbaio/sslscout/" target="_blank" rel="noopener noreferrer"
+       data-i18n="repo_link">Project on GitHub</a>
+  </p>
 </main>
 
 <p class="sr-only" role="status" aria-live="polite" id="announce"></p>
@@ -846,6 +856,7 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
         announce_exported: {one: '{n} row exported to CSV.', other: '{n} rows exported to CSV.'},
 
         footer: 'SSLScout — local report, no external dependencies.',
+        repo_link: 'Project on GitHub',
 
         rel_now: 'just now',
         rel_minutes: {one: '{n} minute', other: '{n} minutes'},
@@ -990,6 +1001,7 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
         announce_exported: {one: '{n} linha exportada em CSV.', other: '{n} linhas exportadas em CSV.'},
 
         footer: 'SSLScout — relatório local, sem dependências externas.',
+        repo_link: 'Projeto no GitHub',
 
         rel_now: 'agora mesmo',
         rel_minutes: {one: '{n} minuto', other: '{n} minutos'},
