@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"sslscout/pkg/checker"
+	"github.com/dbaio/sslscout/pkg/checker"
 )
 
 func res(domain string, status checker.Status, days int) checker.Result {

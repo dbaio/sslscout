@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"sslscout/pkg/i18n"
+	"github.com/dbaio/sslscout/pkg/i18n"
 )
 
 func write(t *testing.T, content string) string {

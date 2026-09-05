@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"sslscout/pkg/checker"
+	"github.com/dbaio/sslscout/pkg/checker"
 )
 
 // SchemaVersion of the format emitted by this package.

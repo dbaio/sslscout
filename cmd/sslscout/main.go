@@ -21,11 +21,11 @@ import (
 	"syscall"
 	"time"
 
-	"sslscout/pkg/checker"
-	"sslscout/pkg/config"
-	"sslscout/pkg/i18n"
-	"sslscout/pkg/notifier"
-	"sslscout/pkg/report"
+	"github.com/dbaio/sslscout/pkg/checker"
+	"github.com/dbaio/sslscout/pkg/config"
+	"github.com/dbaio/sslscout/pkg/i18n"
+	"github.com/dbaio/sslscout/pkg/notifier"
+	"github.com/dbaio/sslscout/pkg/report"
 )
 
 // version is overwritten at build time: -ldflags "-X main.version=v1.2.3".

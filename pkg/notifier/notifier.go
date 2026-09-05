@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"sslscout/pkg/checker"
-	"sslscout/pkg/config"
-	"sslscout/pkg/i18n"
+	"github.com/dbaio/sslscout/pkg/checker"
+	"github.com/dbaio/sslscout/pkg/config"
+	"github.com/dbaio/sslscout/pkg/i18n"
 )
 
 // HTTPTimeout caps each webhook POST. The default net/http client has no

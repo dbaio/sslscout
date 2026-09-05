@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"sslscout/pkg/config"
-	"sslscout/pkg/i18n"
-	"sslscout/pkg/report"
+	"github.com/dbaio/sslscout/pkg/config"
+	"github.com/dbaio/sslscout/pkg/i18n"
+	"github.com/dbaio/sslscout/pkg/report"
 )
 
 // TestConfigurationPrecedence covers default < file < flag, which is the rule

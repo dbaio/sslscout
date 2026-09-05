@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"sslscout/pkg/config"
+	"github.com/dbaio/sslscout/pkg/config"
 )
 
 // SMTPTimeout caps the whole conversation with the SMTP server.

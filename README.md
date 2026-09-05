@@ -82,6 +82,18 @@ which is what the `Dockerfile` does.
 
 ## Install and build
 
+With a Go toolchain available, the shortest route is `go install`:
+
+```sh
+go install github.com/dbaio/sslscout/cmd/sslscout@latest
+```
+
+That drops the `sslscout` binary into `$(go env GOPATH)/bin`. The version and
+the commit reported by `-version` come from the build information the toolchain
+records, so no extra flags are needed.
+
+From a checkout:
+
 ```sh
 git clone https://github.com/dbaio/sslscout.git
 cd sslscout

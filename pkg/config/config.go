@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"sslscout/pkg/i18n"
+	"github.com/dbaio/sslscout/pkg/i18n"
 )
 
 // TLS modes accepted by the SMTP client.

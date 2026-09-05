@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"sslscout/pkg/config"
-	"sslscout/pkg/i18n"
+	"github.com/dbaio/sslscout/pkg/config"
+	"github.com/dbaio/sslscout/pkg/i18n"
 )
 
 // Regression for bug #9: the old message carried only "To:" and a raw "Subject:".
