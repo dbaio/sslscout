@@ -1,0 +1,20 @@
+{
+  "alert_threshold_days": 15,
+  "critical_threshold_days": 7,
+  "timeout_seconds": 10,
+  "concurrency": 20,
+  "retries": 3,
+  "language": "en",
+  "slack_webhook_url": "",
+  "teams_webhook_url": "",
+  "smtp": {
+    "enabled": false,
+    "host": "smtp.example.com",
+    "port": 587,
+    "username": "your_username",
+    "password": "your_password",
+    "from": "alerts@example.com",
+    "to": ["sre@example.com"],
+    "tls": "starttls"
+  }
+}

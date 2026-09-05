@@ -1,0 +1,54 @@
+# SSLScout oneshot unit, triggered by sslscout.timer.
+#
+# Installation:
+#   sudo install -m 0644 examples/systemd/sslscout.service /etc/systemd/system/
+#   sudo install -m 0644 examples/systemd/sslscout.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now sslscout.timer
+#
+# Manual run (without waiting for the timer):
+#   sudo systemctl start sslscout.service
+#   journalctl -u sslscout.service -n 50
+
+[Unit]
+Description=SSLScout - TLS certificate expiry check
+Documentation=https://github.com/dbaio/sslscout
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sslscout
+Group=sslscout
+WorkingDirectory=/opt/sslscout
+ExecStart=/opt/sslscout/sslscout -quiet
+
+# Secrets outside config.json: create /etc/sslscout/secrets.env with mode 0600
+# and lines such as SSLSCOUT_SMTP_PASSWORD=... (see the README "Security"
+# section). SSLSCOUT_LANG=pt-BR also belongs here if you want the alerts in
+# Brazilian Portuguese. The "-" makes systemd tolerate a missing file.
+EnvironmentFile=-/etc/sslscout/secrets.env
+
+# Basic isolation.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# ProtectSystem=strict makes everything read-only; the report needs write
+# permission in this directory.
+ReadWritePaths=/opt/sslscout/public
+
+[Install]
+WantedBy=multi-user.target

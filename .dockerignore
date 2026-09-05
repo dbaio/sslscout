@@ -1,0 +1,37 @@
+# Secrets — must never enter the build context
+config.json
+config.*.json
+.env
+.env.*
+
+# Metadata and history
+.git
+.gitignore
+.github
+
+# Documentation and examples (they do not go into the image)
+*.md
+docs
+examples
+LICENSE
+docker-compose.yml
+docker-compose.*.yml
+
+# Local artifacts
+sslscout
+sslscout.exe
+bin
+dist
+coverage.out
+coverage.html
+*.test
+
+# Generated output — the image produces its own
+public/report.json
+
+# OS/editor litter
+.DS_Store
+*.swp
+*.swo
+.idea
+.vscode

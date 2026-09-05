@@ -1,0 +1,59 @@
+name: Publish the dashboard to GitHub Pages
+
+# Runs SSLScout on the runner, generates public/report.json and publishes the
+# public/ directory to GitHub Pages.
+#
+# Repository prerequisites:
+#   Settings > Pages > Build and deployment > Source: "GitHub Actions".
+#
+# Warning: the published dashboard is PUBLIC if the repository is public. Do
+# not use this workflow with a list of internal domains that must not leak.
+on:
+  workflow_dispatch:
+  schedule:
+    # Every day at 06:00 UTC.
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: false
+
+      - name: Build
+        run: go build -o sslscout ./cmd/sslscout
+
+      - name: Generate report.json
+        # -notify=false makes sure no alert is ever fired from CI.
+        run: ./sslscout -notify=false -out public/report.json
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

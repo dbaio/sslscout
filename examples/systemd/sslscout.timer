@@ -1,0 +1,24 @@
+# Timer that triggers sslscout.service.
+#
+#   sudo systemctl enable --now sslscout.timer
+#   systemctl list-timers sslscout.timer
+
+[Unit]
+Description=Trigger the SSLScout certificate check
+Documentation=https://github.com/dbaio/sslscout
+
+[Timer]
+# Every day at 06:30 (machine local time).
+OnCalendar=*-*-* 06:30:00
+
+# Spread the trigger over up to 15 minutes so it does not always fire on the
+# same second.
+RandomizedDelaySec=15m
+
+# If the machine was off at that time, run as soon as it boots.
+Persistent=true
+
+Unit=sslscout.service
+
+[Install]
+WantedBy=timers.target

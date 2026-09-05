@@ -1,0 +1,2194 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="" data-default-lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>SSLScout — Certificate Monitor</title>
+<script>
+/* Applies the saved theme before the first paint to avoid a flash.
+   localStorage can throw in a private window — hence the try/catch. */
+(function () {
+  try {
+    var t = window.localStorage.getItem('sslscout.theme');
+    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* ignore */ }
+})();
+</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%232563eb' d='M12 1 3 4.5V11c0 5.6 3.8 10.4 9 12 5.2-1.6 9-6.4 9-12V4.5L12 1Z'/%3E%3Cpath fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='m8.3 12 2.6 2.6 4.8-5.4'/%3E%3C/svg%3E">
+<style>
+/* ------------------------------------------------------------------ *
+ * SSLScout — single-file dashboard.
+ * No CDN, no remote fonts, no build step: it works fully offline.
+ * ------------------------------------------------------------------ */
+
+/* ---------- Tokens: light theme (default) ---------- */
+:root {
+  color-scheme: light;
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+  --surface-3: #e9edf2;
+  --border: #dde2e9;
+  --border-strong: #c2cad4;
+  --text: #12161c;
+  --text-2: #4d5765;
+  --text-3: #6f7a89;
+  --accent: #1d4ed8;
+  --accent-text: #ffffff;
+  --accent-soft: #e6edff;
+  --focus: #1d4ed8;
+  --shadow: 0 1px 2px rgba(16, 22, 32, .06), 0 4px 14px rgba(16, 22, 32, .05);
+  --track: #e4e8ee;
+
+  --ok-bg: #e3f6ea;       --ok-fg: #0d5c34;       --ok-color: #16a34a;
+  --warning-bg: #fdf1d8;  --warning-fg: #7a4a05;  --warning-color: #d97706;
+  --critical-bg: #fde9dd; --critical-fg: #8a300f; --critical-color: #ea580c;
+  --expired-bg: #fde5e5;  --expired-fg: #8f1b1b;  --expired-color: #dc2626;
+  --invalid-bg: #efe8fd;  --invalid-fg: #58209f;  --invalid-color: #7c3aed;
+  --error-bg: #e8ecf1;    --error-fg: #3b4553;    --error-color: #64748b;
+  --total-bg: #e6edff;    --total-fg: #17347e;    --total-color: #2563eb;
+}
+
+/* ---------- Tokens: dark theme from the system preference ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --surface: #151b23;
+    --surface-2: #1b222c;
+    --surface-3: #222b36;
+    --border: #2a323d;
+    --border-strong: #3d4756;
+    --text: #e8eef5;
+    --text-2: #a9b6c4;
+    --text-3: #8b98a7;
+    --accent: #6ea8fe;
+    --accent-text: #0d1117;
+    --accent-soft: #1c2c47;
+    --focus: #7cb2ff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .28);
+    --track: #262f3a;
+
+    --ok-bg: #12351f;       --ok-fg: #86e5ad;       --ok-color: #34d17c;
+    --warning-bg: #3a2b0c;  --warning-fg: #f6cd6f;  --warning-color: #f0ad2a;
+    --critical-bg: #40230f; --critical-fg: #ffb48a; --critical-color: #fb7f3f;
+    --expired-bg: #421a1a;  --expired-fg: #ffa6a6;  --expired-color: #f45858;
+    --invalid-bg: #2e2350;  --invalid-fg: #c9b5ff;  --invalid-color: #a78bfa;
+    --error-bg: #232c37;    --error-fg: #b8c5d3;    --error-color: #93a3b5;
+    --total-bg: #17263f;    --total-fg: #a8c8ff;    --total-color: #6ea8fe;
+  }
+}
+
+/* ---------- Tokens: dark theme chosen manually ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --surface: #151b23;
+  --surface-2: #1b222c;
+  --surface-3: #222b36;
+  --border: #2a323d;
+  --border-strong: #3d4756;
+  --text: #e8eef5;
+  --text-2: #a9b6c4;
+  --text-3: #8b98a7;
+  --accent: #6ea8fe;
+  --accent-text: #0d1117;
+  --accent-soft: #1c2c47;
+  --focus: #7cb2ff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .28);
+  --track: #262f3a;
+
+  --ok-bg: #12351f;       --ok-fg: #86e5ad;       --ok-color: #34d17c;
+  --warning-bg: #3a2b0c;  --warning-fg: #f6cd6f;  --warning-color: #f0ad2a;
+  --critical-bg: #40230f; --critical-fg: #ffb48a; --critical-color: #fb7f3f;
+  --expired-bg: #421a1a;  --expired-fg: #ffa6a6;  --expired-color: #f45858;
+  --invalid-bg: #2e2350;  --invalid-fg: #c9b5ff;  --invalid-color: #a78bfa;
+  --error-bg: #232c37;    --error-fg: #b8c5d3;    --error-color: #93a3b5;
+  --total-bg: #17263f;    --total-fg: #a8c8ff;    --total-color: #6ea8fe;
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
+
+button, input, select { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+svg { flex: none; }
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+
+.skip {
+  position: absolute; left: 8px; top: -60px;
+  background: var(--accent); color: var(--accent-text);
+  padding: 10px 16px; border-radius: 8px; text-decoration: none;
+  z-index: 20; transition: top .15s;
+}
+.skip:focus { top: 8px; }
+
+.container { width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 20px; }
+
+/* ---------- Header ---------- */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.topbar-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; min-height: 64px; flex-wrap: wrap; padding-block: 10px;
+}
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand .shield { color: var(--total-color); }
+.brand-name { font-size: 19px; font-weight: 700; letter-spacing: -.02em; display: block; }
+.brand-sub { font-size: 12.5px; color: var(--text-3); display: block; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px; padding: 8px 13px;
+  font-size: 13.5px; font-weight: 550; cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--text-3); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled, input:disabled, select:disabled { opacity: .5; cursor: not-allowed; }
+.btn:disabled:hover { background: var(--surface); border-color: var(--border-strong); }
+.btn:disabled:active { transform: none; }
+.btn-icon { padding: 8px; }
+.btn-primary {
+  background: var(--accent); color: var(--accent-text); border-color: transparent;
+}
+.btn-primary:hover { background: var(--accent); filter: brightness(1.08); border-color: transparent; }
+
+.spinning { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinning { animation: none; }
+  * { transition-duration: .01ms !important; }
+}
+
+/* ---------- v1 notice ---------- */
+.notice {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin-top: 18px; padding: 11px 14px;
+  background: var(--warning-bg); color: var(--warning-fg);
+  border: 1px solid color-mix(in srgb, var(--warning-color) 40%, transparent);
+  border-radius: 10px; font-size: 13.5px;
+}
+
+/* ---------- Metadata strip ---------- */
+.meta {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px 20px; flex-wrap: wrap;
+  margin: 22px 0 16px;
+}
+.meta-info { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; color: var(--text-2); font-size: 13.5px; }
+.meta-info > svg { align-self: center; }
+#meta-text { flex: 1 1 220px; min-width: 0; }
+.meta-info .sep { color: var(--border-strong); }
+.meta-info strong { color: var(--text); font-weight: 600; }
+.stale-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--warning-bg); color: var(--warning-fg);
+  border: 1px solid color-mix(in srgb, var(--warning-color) 45%, transparent);
+  border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 650;
+}
+.auto-block { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); }
+.switch { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+
+select, .field {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 8px;
+  padding: 7px 10px; font-size: 13.5px;
+}
+select { cursor: pointer; }
+
+/* ---------- Summary cards ---------- */
+.cards {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  margin-bottom: 18px;
+}
+.card {
+  position: relative; text-align: left;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 13px 11px; cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: border-color .12s, transform .12s, background .12s;
+}
+.card::before {
+  content: ""; position: absolute; inset: 0 auto 0 0;
+  width: 3px; border-radius: 12px 0 0 12px; background: var(--card-color);
+}
+.card:hover { transform: translateY(-1px); border-color: var(--border-strong); }
+.card[aria-pressed="true"] {
+  border-color: var(--card-color);
+  background: var(--card-bg);
+  box-shadow: 0 0 0 1px var(--card-color) inset, var(--shadow);
+}
+.card-head { display: flex; align-items: center; gap: 6px; color: var(--card-fg); }
+.card-label { font-size: 12px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; }
+.card-value { font-size: 26px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; color: var(--text); }
+.card[data-empty="yes"] .card-value { color: var(--text-3); }
+
+/* ---------- Main panel ---------- */
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: var(--shadow); overflow: hidden;
+  margin-bottom: 28px;
+}
+.toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.search { position: relative; flex: 1 1 260px; min-width: 200px; }
+.search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
+.search input {
+  width: 100%; padding: 8px 32px 8px 34px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 8px; font-size: 13.5px;
+}
+.search input::placeholder { color: var(--text-3); }
+.clear-search {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; padding: 4px; border-radius: 6px;
+  color: var(--text-3); cursor: pointer; display: flex;
+}
+.clear-search:hover { color: var(--text); background: var(--surface-3); }
+.counter { font-size: 13px; color: var(--text-2); margin-left: auto; white-space: nowrap; }
+.sort-mobile { display: none; align-items: center; gap: 6px; }
+
+/* ---------- Table ---------- */
+.table-wrap { width: 100%; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; font-size: 11.5px; font-weight: 650;
+  text-transform: uppercase; letter-spacing: .045em;
+  color: var(--text-3); background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0; white-space: nowrap;
+}
+thead th .col-label { display: block; padding: 10px 14px; }
+th.sortable { padding: 0; }
+th.sortable button {
+  display: flex; align-items: center; gap: 5px; width: 100%;
+  background: none; border: 0; padding: 10px 14px; cursor: pointer;
+  font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit;
+}
+th.sortable button:hover { color: var(--text); background: var(--surface-2); }
+th[aria-sort="ascending"] button, th[aria-sort="descending"] button { color: var(--accent); }
+.arrow { opacity: 0; transition: opacity .12s; }
+th[aria-sort="ascending"] .arrow, th[aria-sort="descending"] .arrow { opacity: 1; }
+th[aria-sort="descending"] .arrow { transform: rotate(180deg); }
+th.sortable button:hover .arrow { opacity: .45; }
+
+tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tbody tr.row:hover td { background: var(--surface-2); }
+tbody tr.row.open td { background: var(--surface-2); }
+tbody tr:last-child td { border-bottom: 0; }
+
+.cell-domain { padding: 0 !important; }
+.toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; padding: 9px 14px; cursor: pointer;
+  text-align: left; font: inherit; color: inherit;
+}
+.toggle:hover .domain-name { color: var(--accent); }
+.chevron { color: var(--text-3); transition: transform .15s; }
+tr.open .chevron { transform: rotate(180deg); color: var(--accent); }
+.domain-name { font-weight: 600; font-size: 14px; word-break: break-all; }
+.domain-port { color: var(--text-3); font-weight: 500; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px 3px 7px; border-radius: 999px;
+  font-size: 12px; font-weight: 650; white-space: nowrap;
+  background: var(--st-bg); color: var(--st-fg);
+  border: 1px solid color-mix(in srgb, var(--st-color) 35%, transparent);
+}
+
+.deadline { display: flex; flex-direction: column; gap: 5px; min-width: 128px; }
+.deadline-text { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.deadline-text.attention { color: var(--st-fg); }
+.track { height: 5px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 3px; background: var(--st-color); min-width: 2px; }
+.deadline-none { color: var(--text-3); }
+
+.cell-date { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.cell-issuer { font-size: 13px; color: var(--text-2); max-width: 230px; }
+.trunc { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-empty { color: var(--text-3); }
+.cell-status { white-space: nowrap; }
+
+/* ---------- Expanded detail ---------- */
+tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px solid var(--border); }
+.detail-box { padding: 14px 16px 16px 40px; }
+.detail-grid {
+  display: grid; gap: 10px 26px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  margin: 0;
+}
+.detail-item dt {
+  font-size: 11px; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .045em; color: var(--text-3); margin-bottom: 2px;
+}
+.detail-item dd {
+  margin: 0; font-size: 13px; color: var(--text);
+  word-break: break-word; overflow-wrap: anywhere;
+}
+.detail-wide { grid-column: 1 / -1; }
+.provenance {
+  display: flex; gap: 9px; align-items: flex-start;
+  background: var(--warning-bg); color: var(--warning-fg);
+  border: 1px solid color-mix(in srgb, var(--warning-color) 40%, transparent);
+  border-radius: 8px; padding: 9px 11px; margin-bottom: 13px;
+  font-size: 12.5px; line-height: 1.45;
+}
+.provenance svg { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px; }
+.provenance b { font-weight: 650; }
+.btn-plain {
+  margin-top: 6px; background: none; border: 1px solid var(--border-strong);
+  border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer;
+  color: var(--text-2); font-family: inherit;
+}
+.btn-plain:hover { background: var(--surface-3); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 2px 7px; font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-2);
+}
+.detail-error {
+  background: var(--expired-bg); color: var(--expired-fg);
+  border: 1px solid color-mix(in srgb, var(--expired-color) 35%, transparent);
+  border-radius: 8px; padding: 9px 11px; white-space: pre-wrap;
+}
+
+/* ---------- States ---------- */
+.state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 56px 24px; text-align: center;
+}
+.state svg { color: var(--text-3); }
+.state-title { font-size: 15.5px; font-weight: 650; }
+.state-text { font-size: 13.5px; color: var(--text-2); max-width: 460px; margin: 0; }
+.state code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--surface-3); border: 1px solid var(--border);
+  border-radius: 5px; padding: 1px 5px; font-size: 12.5px;
+}
+.state.failed svg { color: var(--expired-color); }
+
+.footer { text-align: center; color: var(--text-3); font-size: 12.5px; padding-bottom: 28px; }
+
+/* ---------- Responsive: stacked cards ---------- */
+@media (max-width: 800px) {
+  .container { padding: 0 14px; }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); }
+  .card-value { font-size: 22px; }
+  .counter { margin-left: 0; width: 100%; }
+  .sort-mobile { display: flex; }
+
+  table, thead, tbody, tr, td { display: block; }
+  thead { display: none; }
+  .table-wrap { padding: 12px; }
+
+  tbody tr.row {
+    border: 1px solid var(--border); border-radius: 11px;
+    background: var(--surface); margin-bottom: 10px; overflow: hidden;
+  }
+  tbody tr.row.open { margin-bottom: 0; border-radius: 11px 11px 0 0; border-bottom: 0; }
+  tbody tr.row:hover td, tbody tr.row.open td { background: transparent; }
+
+  tbody td {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; padding: 7px 13px; border-bottom: 0;
+  }
+  tbody td::before {
+    content: attr(data-label);
+    font-size: 11px; font-weight: 650; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--text-3); flex: none;
+  }
+  tbody td.cell-domain { padding: 0 !important; display: block; border-bottom: 1px solid var(--border); }
+  tbody td.cell-domain::before { content: none; }
+  .toggle { padding: 11px 13px; }
+  .deadline { min-width: 0; flex: 1 1 auto; max-width: 190px; }
+  .cell-issuer { max-width: 62%; }
+  .cell-issuer .trunc { text-align: right; }
+
+  tr.detail {
+    border: 1px solid var(--border); border-top: 1px dashed var(--border);
+    border-radius: 0 0 11px 11px; margin-bottom: 10px; overflow: hidden;
+  }
+  tr.detail > td { border-bottom: 0; display: block; }
+  tr.detail > td::before { content: none; }
+  .detail-box { padding: 13px; }
+  .detail-grid { grid-template-columns: 1fr; gap: 9px; }
+}
+
+@media (max-width: 480px) {
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .meta { gap: 10px; }
+  .brand-sub { display: none; }
+}
+</style>
+</head>
+<body>
+
+<a class="skip" href="#content" data-i18n="skip_link">Skip to content</a>
+
+<!-- Inline SVG icon library: no external request. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol viewBox="0 0 24 24" id="i-shield" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 21.6s7.6-3.9 7.6-9.6V5.2L12 2.4 4.4 5.2v6.8c0 5.7 7.6 9.6 7.6 9.6Z"/>
+      <path d="m8.8 11.9 2.3 2.3 4.1-4.6"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-ok" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="m8 12.3 2.6 2.6L16 9"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-warning" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.3 4.3 1.9 18.8A2 2 0 0 0 3.6 21.8h16.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/>
+      <path d="M12 10v4"/><path d="M12 17.6h.01"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-critical" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 2.4h8L21.6 8v8L16 21.6H8L2.4 16V8L8 2.4Z"/>
+      <path d="M12 7.6v5"/><path d="M12 16.2h.01"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-expired" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-12Z"/>
+      <path d="M8 3v4M16 3v4M4 10h16"/><path d="m10 13.5 4 4M14 13.5l-4 4"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-invalid" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 21.6s7.6-3.9 7.6-9.6V5.2L12 2.4 4.4 5.2v6.8c0 5.7 7.6 9.6 7.6 9.6Z"/>
+      <path d="m9.6 9.6 4.8 4.8M14.4 9.6l-4.8 4.8"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-error" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M5.6 5.6 18.4 18.4"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-total" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h14a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5v-11Z"/>
+      <path d="M3.5 10h17M8 19V10"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-chevron" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m6 9.5 6 6 6-6"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-arrow-up" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 19V5M6 11l6-6 6 6"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-refresh" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3.5v6h-6"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-sun" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2.5v2M12 19.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2.5 12h2M19.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-moon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20.8 13.4A8.6 8.6 0 1 1 10.6 3.2a6.7 6.7 0 0 0 10.2 10.2Z"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-search" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="6.6"/><path d="m20 20-4.3-4.3"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-x" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 6 6 18M6 6l12 12"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-download" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 19.5h16"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-clock" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M12 6.8V12l3.2 2.2"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-box" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.5 13h4.2l1.8 2.8h5l1.8-2.8h4.2"/>
+      <path d="M3.5 13 6.4 4.6h11.2L20.5 13v6.4a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V13Z"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-alert-circle" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M12 7.4v5.2"/><path d="M12 16.4h.01"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-filter" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.5 5.5h17l-6.6 7.8v5.6l-3.8 2v-7.6L3.5 5.5Z"/>
+    </symbol>
+    <symbol viewBox="0 0 24 24" id="i-globe" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M3.2 9.5h17.6M3.2 14.5h17.6"/>
+      <path d="M12 3a14 14 0 0 1 0 18A14 14 0 0 1 12 3Z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <div class="brand">
+      <svg class="shield" width="30" height="30" aria-hidden="true" focusable="false"><use href="#i-shield"/></svg>
+      <span>
+        <span class="brand-name">SSLScout</span>
+        <span class="brand-sub" data-i18n="brand_sub">TLS certificate monitoring</span>
+      </span>
+    </div>
+    <div class="topbar-actions">
+      <label class="sr-only" for="lang-select" id="lang-label" data-i18n="language">Language</label>
+      <select id="lang-select" title="Language"></select>
+      <button type="button" class="btn btn-icon" id="btn-theme" aria-pressed="false" title="Toggle theme">
+        <svg width="17" height="17" aria-hidden="true" focusable="false" id="icon-theme"><use href="#i-moon"/></svg>
+        <span class="sr-only" id="label-theme">Toggle theme</span>
+      </button>
+      <button type="button" class="btn btn-primary" id="btn-refresh">
+        <svg width="16" height="16" aria-hidden="true" focusable="false" id="icon-refresh"><use href="#i-refresh"/></svg>
+        <span data-i18n="refresh">Refresh</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="content" class="container">
+
+  <div class="notice" id="v1-notice" hidden>
+    <svg width="17" height="17" aria-hidden="true" focusable="false" style="margin-top:1px"><use href="#i-warning"/></svg>
+    <span id="v1-notice-text"></span>
+  </div>
+
+  <div class="meta">
+    <div class="meta-info" id="meta-info">
+      <svg width="15" height="15" aria-hidden="true" focusable="false"><use href="#i-clock"/></svg>
+      <span id="meta-text" data-i18n="loading_report">Loading report…</span>
+      <span class="stale-badge" id="stale-badge" hidden>
+        <svg width="12" height="12" aria-hidden="true" focusable="false"><use href="#i-warning"/></svg>
+        <span data-i18n="stale_badge">Report out of date</span>
+      </span>
+    </div>
+    <div class="auto-block">
+      <label class="switch" for="chk-auto">
+        <input type="checkbox" id="chk-auto">
+        <span data-i18n="auto_refresh">Auto refresh</span>
+      </label>
+      <label class="sr-only" for="sel-interval" data-i18n="auto_interval_label">Auto refresh interval</label>
+      <select id="sel-interval" disabled>
+        <option value="30000" data-i18n="interval_30s">30 s</option>
+        <option value="60000" selected data-i18n="interval_1m">1 min</option>
+        <option value="300000" data-i18n="interval_5m">5 min</option>
+        <option value="900000" data-i18n="interval_15m">15 min</option>
+      </select>
+    </div>
+  </div>
+
+  <h2 class="sr-only" data-i18n="summary_heading">Summary by status</h2>
+  <div class="cards" id="cards"></div>
+
+  <section class="panel" aria-labelledby="table-title">
+    <h2 class="sr-only" id="table-title" data-i18n="table_heading">Monitored certificates</h2>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg width="16" height="16" aria-hidden="true" focusable="false"><use href="#i-search"/></svg>
+        <label class="sr-only" for="search" data-i18n="search_label">Search by domain or issuer</label>
+        <input type="search" id="search" placeholder="Search domain, issuer, SAN…" autocomplete="off" spellcheck="false"
+               data-i18n-placeholder="search_placeholder">
+        <button type="button" class="clear-search" id="clear-search" hidden>
+          <svg width="14" height="14" aria-hidden="true" focusable="false"><use href="#i-x"/></svg>
+          <span class="sr-only" data-i18n="clear_search">Clear search</span>
+        </button>
+      </div>
+
+      <label class="sr-only" for="filter-status" data-i18n="filter_label">Filter by status</label>
+      <select id="filter-status">
+        <option value="" data-i18n="filter_all">All statuses</option>
+        <option value="ok" data-i18n="status_ok">OK</option>
+        <option value="warning" data-i18n="status_warning">Warning</option>
+        <option value="critical" data-i18n="status_critical">Critical</option>
+        <option value="expired" data-i18n="status_expired">Expired</option>
+        <option value="invalid" data-i18n="status_invalid">Invalid</option>
+        <option value="error" data-i18n="status_error">Error</option>
+      </select>
+
+      <div class="sort-mobile">
+        <label class="sr-only" for="sort-field" data-i18n="sort_label">Sort by</label>
+        <select id="sort-field">
+          <option value="domain" data-i18n="sort_domain">Sort: domain</option>
+          <option value="status" data-i18n="sort_status">Sort: status</option>
+          <option value="days" data-i18n="sort_deadline">Sort: time left</option>
+          <option value="expires" data-i18n="sort_expires">Sort: expiry</option>
+        </select>
+        <button type="button" class="btn btn-icon" id="sort-direction" title="Invert sorting">
+          <svg width="15" height="15" aria-hidden="true" focusable="false" id="icon-sort"><use href="#i-arrow-up"/></svg>
+          <span class="sr-only" data-i18n="sort_invert_sr">Invert the sort direction</span>
+        </button>
+      </div>
+
+      <button type="button" class="btn" id="btn-csv">
+        <svg width="15" height="15" aria-hidden="true" focusable="false"><use href="#i-download"/></svg>
+        <span data-i18n="export_csv">Export CSV</span>
+      </button>
+
+      <span class="counter" id="counter"></span>
+    </div>
+
+    <div class="table-wrap" id="table-wrap" hidden>
+      <table>
+        <caption class="sr-only" data-i18n="table_caption">Monitored TLS certificates, with status, time to expiry and issuer</caption>
+        <thead>
+          <tr>
+            <th scope="col" class="sortable" aria-sort="none" data-field="domain">
+              <button type="button"><span data-i18n="col_domain">Domain</span> <svg class="arrow" width="12" height="12" aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg></button>
+            </th>
+            <th scope="col" class="sortable" aria-sort="none" data-field="status">
+              <button type="button"><span data-i18n="col_status">Status</span> <svg class="arrow" width="12" height="12" aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg></button>
+            </th>
+            <th scope="col" class="sortable" aria-sort="none" data-field="days">
+              <button type="button"><span data-i18n="col_deadline">Time left</span> <svg class="arrow" width="12" height="12" aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg></button>
+            </th>
+            <th scope="col" class="sortable" aria-sort="none" data-field="expires">
+              <button type="button"><span data-i18n="col_expires">Expires on</span> <svg class="arrow" width="12" height="12" aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg></button>
+            </th>
+            <th scope="col"><span class="col-label" data-i18n="col_issuer">Issuer</span></th>
+          </tr>
+        </thead>
+        <tbody id="tbody-results"></tbody>
+      </table>
+    </div>
+
+    <div class="state" id="state"></div>
+  </section>
+
+  <p class="footer" data-i18n="footer">SSLScout — local report, no external dependencies.</p>
+</main>
+
+<p class="sr-only" role="status" aria-live="polite" id="announce"></p>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ================================================================
+   * Translations
+   * ================================================================
+   * Adding a language means adding one entry to LANGS and one code to
+   * LANG_ORDER — nothing else in this file needs to change. Each entry has:
+   *
+   *   name    the label shown in the language picker, in its own language
+   *   locale  the BCP 47 tag handed to Intl for dates and numbers
+   *   s       the strings themselves
+   *
+   * A string is either plain text, a plural object {one, other}, or an array
+   * of segments, where {code: "..."} and {strong: "..."} become real elements.
+   * Placeholders look like {name} and are filled from the vars object.
+   *
+   * Any key missing from a language falls back to English, so a partial
+   * translation degrades one string at a time instead of breaking the page.
+   * ================================================================ */
+
+  var LANG_ORDER = ['en', 'pt-BR'];
+
+  var LANGS = {
+
+    en: {
+      name: 'English',
+      locale: 'en',
+      s: {
+        title: 'SSLScout — Certificate Monitor',
+        skip_link: 'Skip to content',
+        brand_sub: 'TLS certificate monitoring',
+        language: 'Language',
+        language_title: 'Interface language',
+        refresh: 'Refresh',
+        theme_to_light: 'Switch to the light theme',
+        theme_to_dark: 'Switch to the dark theme',
+
+        v1_notice: ['This ', {code: 'report.json'}, ' is in the old format (v1, a bare array). ' +
+          'Some fields — detailed status, thresholds, certificate metadata — are not available. ' +
+          'Generate a new report with a current ', {strong: 'sslscout'}, '.'],
+
+        loading_report: 'Loading report…',
+        report_unavailable: 'Report unavailable.',
+        report_no_timestamp: 'The report does not say when it was generated.',
+        meta_checked: 'Checked at {when} ({relative})',
+        meta_duration: 'check took {duration}',
+        meta_thresholds: 'thresholds: {alert} d / {critical} d',
+        stale_badge: 'Report out of date',
+        auto_refresh: 'Auto refresh',
+        auto_interval_label: 'Auto refresh interval',
+        interval_30s: '30 s',
+        interval_1m: '1 min',
+        interval_5m: '5 min',
+        interval_15m: '15 min',
+
+        summary_heading: 'Summary by status',
+        table_heading: 'Monitored certificates',
+        table_caption: 'Monitored TLS certificates, with status, time left and issuer',
+
+        search_label: 'Search by domain or issuer',
+        search_placeholder: 'Search domain, issuer, SAN…',
+        clear_search: 'Clear the search',
+        filter_label: 'Filter by status',
+        filter_all: 'All statuses',
+
+        card_total: 'Total',
+        status_ok: 'OK',
+        status_warning: 'Warning',
+        status_critical: 'Critical',
+        status_expired: 'Expired',
+        status_invalid: 'Invalid',
+        status_error: 'Error',
+
+        sort_label: 'Sort by',
+        sort_domain: 'Sort: domain',
+        sort_status: 'Sort: status',
+        sort_deadline: 'Sort: time left',
+        sort_expires: 'Sort: expiry',
+        sort_invert: 'Invert sorting',
+        sort_invert_sr: 'Invert the sort direction',
+        sort_asc_title: 'Ascending — click to invert',
+        sort_desc_title: 'Descending — click to invert',
+        export_csv: 'Export CSV',
+
+        col_domain: 'Domain',
+        col_status: 'Status',
+        col_deadline: 'Time left',
+        col_expires: 'Expires on',
+        col_issuer: 'Issuer',
+
+        counter_total: {one: '{n} domain', other: '{n} domains'},
+        counter_filtered: '{shown} of {total} domains',
+
+        deadline_no_cert: 'no certificate',
+        deadline_no_data: 'no expiry data',
+        deadline_expired_ago: {one: 'expired {n} day ago', other: 'expired {n} days ago'},
+        deadline_today: 'expires today',
+        deadline_days: {one: '{n} day', other: '{n} days'},
+        deadline_scale: '{text} (on a {days}-day scale)',
+
+        det_domain: 'Checked domain',
+        det_issuer: 'Issuer',
+        det_subject: 'Subject',
+        det_serial: 'Serial number',
+        det_tls: 'TLS version',
+        det_cipher: 'Cipher suite',
+        det_issued_at: 'Issued at',
+        det_expires_at: 'Expires at',
+        det_checked_at: 'Checked at',
+        det_duration: 'Check duration',
+        det_attempts: 'Attempts',
+        det_attempts_value: {one: '{n} attempt', other: '{n} attempts'},
+        det_error_kind: 'Failure type',
+        det_error_message: 'Error message',
+        det_none: 'No further detail available.',
+        sans_title: 'Subject alternative names (SAN) — {n}',
+        sans_more: {one: 'Show {n} more name', other: 'Show {n} more names'},
+        sans_less: 'Show fewer',
+
+        provenance_title: 'Unverified data. ',
+        provenance_text: 'Certificate validation failed, so the fields below came from a ' +
+          'reconnection without verification, for diagnosis only. They describe what the ' +
+          'server presented — they do not confirm its identity.',
+
+        err_dns: 'DNS failure',
+        err_timeout: 'Timed out',
+        err_refused: 'Connection refused',
+        err_expired: 'Certificate expired',
+        err_hostname_mismatch: 'Hostname mismatch',
+        err_untrusted: 'Untrusted chain',
+        err_not_yet_valid: 'Not yet valid',
+        err_no_certificate: 'No certificate presented',
+        err_protocol: 'Protocol error',
+        err_other: 'Other',
+
+        state_empty_title: 'No domains monitored',
+        state_empty_text: ['The report was generated but has no results. Add entries to ',
+          {code: 'domains.txt'}, ' and run sslscout again.'],
+        state_nofilter_title: 'No results for the current filter',
+        state_nofilter_text: 'Adjust the search or the status filter to see the monitored domains.',
+        clear_filters: 'Clear the filters',
+        state_failed_title: 'Could not load report.json',
+        state_failed_text: ['Generate the report by running ', {code: 'sslscout'},
+          ' — by default it writes to ', {code: 'public/report.json'}, '.'],
+        state_failed_file: ['You opened this page over file://, and the browser blocks reading ' +
+          'local files. Serve the directory instead, for example with ',
+          {code: 'sslscout -serve :8080'}, '.'],
+
+        announce_updated: {one: 'Report updated: {n} domain.', other: 'Report updated: {n} domains.'},
+        announce_failed: 'Could not load the report.',
+        announce_nothing: 'Nothing to export.',
+        announce_exported: {one: '{n} row exported to CSV.', other: '{n} rows exported to CSV.'},
+
+        footer: 'SSLScout — local report, no external dependencies.',
+
+        rel_now: 'just now',
+        rel_minutes: {one: '{n} minute', other: '{n} minutes'},
+        rel_hours: {one: '{n} hour', other: '{n} hours'},
+        rel_days: {one: '{n} day', other: '{n} days'},
+        rel_months: {one: '{n} month', other: '{n} months'},
+        rel_past: '{time} ago',
+        rel_future: 'in {time}',
+
+        dur_ms: '{n} ms',
+        dur_s: '{n} s'
+      }
+    },
+
+    'pt-BR': {
+      name: 'Português (Brasil)',
+      locale: 'pt-BR',
+      s: {
+        title: 'SSLScout — Monitor de Certificados',
+        skip_link: 'Pular para o conteúdo',
+        brand_sub: 'Monitoramento de certificados TLS',
+        language: 'Idioma',
+        language_title: 'Idioma da interface',
+        refresh: 'Atualizar',
+        theme_to_light: 'Mudar para o tema claro',
+        theme_to_dark: 'Mudar para o tema escuro',
+
+        v1_notice: ['Este ', {code: 'report.json'}, ' está no formato antigo (v1, array simples). ' +
+          'Alguns campos — status detalhado, limiares, metadados do certificado — não estão ' +
+          'disponíveis. Gere um novo relatório com uma versão atual do ', {strong: 'sslscout'}, '.'],
+
+        loading_report: 'Carregando relatório…',
+        report_unavailable: 'Relatório indisponível.',
+        report_no_timestamp: 'O relatório não informa quando foi gerado.',
+        meta_checked: 'Verificado em {when} ({relative})',
+        meta_duration: 'checagem em {duration}',
+        meta_thresholds: 'limiares: {alert} d / {critical} d',
+        stale_badge: 'Relatório desatualizado',
+        auto_refresh: 'Atualizar automaticamente',
+        auto_interval_label: 'Intervalo de atualização automática',
+        interval_30s: '30 s',
+        interval_1m: '1 min',
+        interval_5m: '5 min',
+        interval_15m: '15 min',
+
+        summary_heading: 'Resumo por status',
+        table_heading: 'Certificados monitorados',
+        table_caption: 'Certificados TLS monitorados, com status, prazo de expiração e emissor',
+
+        search_label: 'Buscar por domínio ou emissor',
+        search_placeholder: 'Buscar domínio, emissor, SAN…',
+        clear_search: 'Limpar a busca',
+        filter_label: 'Filtrar por status',
+        filter_all: 'Todos os status',
+
+        card_total: 'Total',
+        status_ok: 'OK',
+        status_warning: 'Atenção',
+        status_critical: 'Crítico',
+        status_expired: 'Expirado',
+        status_invalid: 'Inválido',
+        status_error: 'Erro',
+
+        sort_label: 'Ordenar por',
+        sort_domain: 'Ordenar: domínio',
+        sort_status: 'Ordenar: status',
+        sort_deadline: 'Ordenar: prazo',
+        sort_expires: 'Ordenar: validade',
+        sort_invert: 'Inverter ordenação',
+        sort_invert_sr: 'Inverter a direção da ordenação',
+        sort_asc_title: 'Ordem crescente — clique para inverter',
+        sort_desc_title: 'Ordem decrescente — clique para inverter',
+        export_csv: 'Exportar CSV',
+
+        col_domain: 'Domínio',
+        col_status: 'Status',
+        col_deadline: 'Prazo',
+        col_expires: 'Expira em',
+        col_issuer: 'Emissor',
+
+        counter_total: {one: '{n} domínio', other: '{n} domínios'},
+        counter_filtered: '{shown} de {total} domínios',
+
+        deadline_no_cert: 'sem certificado',
+        deadline_no_data: 'sem dados de validade',
+        deadline_expired_ago: {one: 'expirado há {n} dia', other: 'expirado há {n} dias'},
+        deadline_today: 'expira hoje',
+        deadline_days: {one: '{n} dia', other: '{n} dias'},
+        deadline_scale: '{text} (escala de {days} dias)',
+
+        det_domain: 'Domínio verificado',
+        det_issuer: 'Emissor',
+        det_subject: 'Subject',
+        det_serial: 'Número de série',
+        det_tls: 'Versão TLS',
+        det_cipher: 'Cipher suite',
+        det_issued_at: 'Emitido em',
+        det_expires_at: 'Expira em',
+        det_checked_at: 'Verificado em',
+        det_duration: 'Duração da checagem',
+        det_attempts: 'Tentativas',
+        det_attempts_value: {one: '{n} tentativa', other: '{n} tentativas'},
+        det_error_kind: 'Tipo de falha',
+        det_error_message: 'Mensagem de erro',
+        det_none: 'Nenhum detalhe adicional disponível.',
+        sans_title: 'Nomes alternativos (SAN) — {n}',
+        sans_more: {one: 'Mostrar mais {n} nome', other: 'Mostrar os outros {n} nomes'},
+        sans_less: 'Mostrar menos',
+
+        provenance_title: 'Dados não verificados. ',
+        provenance_text: 'A validação do certificado falhou, então os campos abaixo foram ' +
+          'obtidos numa reconexão sem verificação, apenas para diagnóstico. Eles descrevem o ' +
+          'que o servidor apresentou — não confirmam a identidade dele.',
+
+        err_dns: 'Falha de DNS',
+        err_timeout: 'Tempo esgotado',
+        err_refused: 'Conexão recusada',
+        err_expired: 'Certificado expirado',
+        err_hostname_mismatch: 'Hostname não confere',
+        err_untrusted: 'Cadeia não confiável',
+        err_not_yet_valid: 'Ainda não válido',
+        err_no_certificate: 'Nenhum certificado apresentado',
+        err_protocol: 'Erro de protocolo',
+        err_other: 'Outro',
+
+        state_empty_title: 'Nenhum domínio monitorado',
+        state_empty_text: ['O relatório foi gerado, mas está sem resultados. Adicione entradas em ',
+          {code: 'domains.txt'}, ' e rode o sslscout novamente.'],
+        state_nofilter_title: 'Nenhum resultado para o filtro atual',
+        state_nofilter_text: 'Ajuste a busca ou o filtro de status para ver os domínios monitorados.',
+        clear_filters: 'Limpar os filtros',
+        state_failed_title: 'Não foi possível carregar o report.json',
+        state_failed_text: ['Gere o relatório executando o ', {code: 'sslscout'},
+          ' — por padrão ele escreve em ', {code: 'public/report.json'}, '.'],
+        state_failed_file: ['Você abriu a página via file://, e o navegador bloqueia a leitura ' +
+          'de arquivos locais. Sirva o diretório, por exemplo com ',
+          {code: 'sslscout -serve :8080'}, '.'],
+
+        announce_updated: {one: 'Relatório atualizado: {n} domínio.', other: 'Relatório atualizado: {n} domínios.'},
+        announce_failed: 'Não foi possível carregar o relatório.',
+        announce_nothing: 'Nada para exportar.',
+        announce_exported: {one: '{n} linha exportada em CSV.', other: '{n} linhas exportadas em CSV.'},
+
+        footer: 'SSLScout — relatório local, sem dependências externas.',
+
+        rel_now: 'agora mesmo',
+        rel_minutes: {one: '{n} minuto', other: '{n} minutos'},
+        rel_hours: {one: '{n} hora', other: '{n} horas'},
+        rel_days: {one: '{n} dia', other: '{n} dias'},
+        rel_months: {one: '{n} mês', other: '{n} meses'},
+        rel_past: 'há {time}',
+        rel_future: 'em {time}',
+
+        dur_ms: '{n} ms',
+        dur_s: '{n} s'
+      }
+    }
+  };
+
+  var FALLBACK_LANG = 'en';
+
+  /* ================================================================
+   * Constants
+   * ================================================================ */
+
+  // Fallback thresholds: used ONLY when the report does not carry them
+  // (legacy v1 format). The normal path reads alert/critical_threshold_days.
+  var DEFAULT_ALERT_THRESHOLD = 15;
+  var DEFAULT_CRITICAL_THRESHOLD = 7;
+
+  // Deadline bar scale: 90 days fills the bar.
+  var BAR_SCALE_DAYS = 90;
+
+  // A report is considered stale after 24 h.
+  var STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+  var KEYS = {
+    theme: 'sslscout.theme',
+    auto: 'sslscout.auto',
+    interval: 'sslscout.interval',
+    lang: 'sslscout.lang'
+  };
+
+  // status -> icon and severity. The label comes from the catalog.
+  var STATUS = {
+    ok:       { icon: 'i-ok',       severity: 0 },
+    warning:  { icon: 'i-warning',  severity: 1 },
+    critical: { icon: 'i-critical', severity: 2 },
+    invalid:  { icon: 'i-invalid',  severity: 3 },
+    expired:  { icon: 'i-expired',  severity: 4 },
+    error:    { icon: 'i-error',    severity: 5 }
+  };
+
+  var CARD_ORDER = ['total', 'ok', 'warning', 'critical', 'expired', 'invalid', 'error'];
+
+  var CARD_ICON = {
+    total: 'i-total', ok: 'i-ok', warning: 'i-warning', critical: 'i-critical',
+    expired: 'i-expired', invalid: 'i-invalid', error: 'i-error'
+  };
+
+  // Closed error_kind vocabulary (contract §1) -> translation key.
+  var ERROR_KEYS = {
+    dns: 'err_dns',
+    timeout: 'err_timeout',
+    refused: 'err_refused',
+    expired: 'err_expired',
+    hostname_mismatch: 'err_hostname_mismatch',
+    untrusted: 'err_untrusted',
+    not_yet_valid: 'err_not_yet_valid',
+    no_certificate: 'err_no_certificate',
+    protocol: 'err_protocol',
+    other: 'err_other'
+  };
+
+  /* ================================================================
+   * State
+   * ================================================================ */
+
+  var lang = FALLBACK_LANG;     // active language code
+  var report = null;            // normalized report
+  var results = [];             // normalized items
+  var expanded = new Set();
+  var sortState = { field: 'status', direction: 'desc' };
+  var statusFilter = '';
+  var searchTerm = '';
+  var autoTimer = null;
+  var relativeTimer = null;
+  var loading = false;
+  var lastState = null;         // which empty/error state is on screen, if any
+  var lastStateDetail = null;
+
+  /* ================================================================
+   * Utilities
+   * ================================================================ */
+
+  function $(id) { return document.getElementById(id); }
+
+  /** Creates an element. All text goes in through textContent — never innerHTML. */
+  function make(tag, options) {
+    options = options || {};
+    var n = document.createElement(tag);
+    if (options.cls) n.className = options.cls;
+    if (options.text !== undefined && options.text !== null) n.textContent = String(options.text);
+    if (options.attrs) {
+      for (var k in options.attrs) {
+        if (Object.prototype.hasOwnProperty.call(options.attrs, k) && options.attrs[k] !== null) {
+          n.setAttribute(k, String(options.attrs[k]));
+        }
+      }
+    }
+    if (options.children) {
+      for (var i = 0; i < options.children.length; i++) {
+        if (options.children[i]) n.appendChild(options.children[i]);
+      }
+    }
+    return n;
+  }
+
+  /** Icon taken from the inline sprite (createElementNS: no innerHTML). */
+  function icon(id, size, cls) {
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', size || 16);
+    svg.setAttribute('height', size || 16);
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    if (cls) svg.setAttribute('class', cls);
+    var use = document.createElementNS(NS, 'use');
+    use.setAttribute('href', '#' + id);
+    svg.appendChild(use);
+    return svg;
+  }
+
+  /* --- localStorage: can throw in a private window / with site data blocked --- */
+  function readLocal(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function writeLocal(key, value) {
+    try { window.localStorage.setItem(key, value); } catch (e) { /* ignore */ }
+  }
+
+  function isText(v) { return typeof v === 'string' && v.trim() !== ''; }
+  function isNumber(v) { return typeof v === 'number' && isFinite(v); }
+
+  function validDate(iso) {
+    if (!isText(iso) || iso.indexOf('0001-01-01') === 0) return null;
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /* ================================================================
+   * Translation engine
+   * ================================================================ */
+
+  var fmtDateTime, fmtDate, fmtNumber;
+
+  function buildFormatters() {
+    var locale = LANGS[lang].locale;
+    fmtDateTime = new Intl.DateTimeFormat(locale, {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    fmtDate = new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+    fmtNumber = new Intl.NumberFormat(locale);
+  }
+
+  function rawString(key) {
+    var table = LANGS[lang] && LANGS[lang].s;
+    if (table && Object.prototype.hasOwnProperty.call(table, key)) return table[key];
+    var fallback = LANGS[FALLBACK_LANG].s;
+    if (Object.prototype.hasOwnProperty.call(fallback, key)) return fallback[key];
+    return null;
+  }
+
+  function interpolate(template, vars) {
+    if (!vars) return template;
+    return template.replace(/\{(\w+)\}/g, function (whole, name) {
+      if (!Object.prototype.hasOwnProperty.call(vars, name)) return whole;
+      var v = vars[name];
+      return typeof v === 'number' ? fmtNumber.format(v) : String(v);
+    });
+  }
+
+  /** Translates a key. vars.n selects the plural form when there is one. */
+  function t(key, vars) {
+    var entry = rawString(key);
+    if (entry === null) return key;
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      entry = (vars && Math.abs(Number(vars.n)) === 1) ? entry.one : entry.other;
+    }
+    if (typeof entry !== 'string') return key;
+    return interpolate(entry, vars);
+  }
+
+  /** Renders a segmented string ("… <code>x</code> …") into an element. */
+  function fillSegments(el, key) {
+    var segments = rawString(key);
+    el.textContent = '';
+    if (typeof segments === 'string') { el.textContent = segments; return el; }
+    if (!Array.isArray(segments)) { el.textContent = key; return el; }
+    segments.forEach(function (seg) {
+      if (typeof seg === 'string') {
+        el.appendChild(document.createTextNode(seg));
+      } else if (seg && seg.code !== undefined) {
+        el.appendChild(make('code', { text: seg.code }));
+      } else if (seg && seg.strong !== undefined) {
+        el.appendChild(make('strong', { text: seg.strong }));
+      }
+    });
+    return el;
+  }
+
+  function statusLabel(status) { return t('status_' + status); }
+  function cardLabel(key) { return key === 'total' ? t('card_total') : statusLabel(key); }
+  function errorLabel(kind) { return ERROR_KEYS[kind] ? t(ERROR_KEYS[kind]) : kind; }
+
+  function formatDateTime(d) { return d ? fmtDateTime.format(d) : ''; }
+  function formatDate(d) { return d ? fmtDate.format(d) : ''; }
+
+  /** Relative time built from the catalog: no Intl.RelativeTimeFormat needed. */
+  function relativeTime(date) {
+    var ms = Date.now() - date.getTime();
+    var future = ms < 0;
+    var s = Math.round(Math.abs(ms) / 1000);
+    var text;
+    if (s < 45) return t('rel_now');
+    if (s < 90) text = t('rel_minutes', { n: 1 });
+    else if (s < 3600) { var m = Math.round(s / 60); text = t('rel_minutes', { n: m }); }
+    else if (s < 86400) { var h = Math.round(s / 3600); text = t('rel_hours', { n: h }); }
+    else if (s < 2592000) { var d = Math.round(s / 86400); text = t('rel_days', { n: d }); }
+    else { var mo = Math.round(s / 2592000); text = t('rel_months', { n: mo }); }
+    return t(future ? 'rel_future' : 'rel_past', { time: text });
+  }
+
+  function formatDuration(ms) {
+    if (!isNumber(ms) || ms < 0) return '';
+    if (ms < 1000) return t('dur_ms', { n: Math.round(ms) });
+    var seconds = ms / 1000;
+    var digits = ms < 10000 ? 2 : 1;
+    var locale = LANGS[lang].locale;
+    var value = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: digits, maximumFractionDigits: digits
+    }).format(seconds);
+    return t('dur_s', { n: value });
+  }
+
+  /* --- Applying the language to the static markup and the whole page --- */
+
+  function applyStaticStrings() {
+    var nodes = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].textContent = t(nodes[i].getAttribute('data-i18n'));
+    }
+    nodes = document.querySelectorAll('[data-i18n-placeholder]');
+    for (var j = 0; j < nodes.length; j++) {
+      nodes[j].setAttribute('placeholder', t(nodes[j].getAttribute('data-i18n-placeholder')));
+    }
+    fillSegments($('v1-notice-text'), 'v1_notice');
+    $('lang-select').title = t('language_title');
+    $('sort-direction').title = t('sort_invert');
+    document.title = t('title');
+  }
+
+  function resolveLang() {
+    // 1) ?lang= in the URL wins, so a link can pin a language.
+    var fromQuery = null;
+    try {
+      fromQuery = new URLSearchParams(window.location.search).get('lang');
+    } catch (e) { /* very old browser: ignore */ }
+    if (fromQuery && LANGS[fromQuery]) return fromQuery;
+
+    // 2) what the visitor picked last time.
+    var saved = readLocal(KEYS.lang);
+    if (saved && LANGS[saved]) return saved;
+
+    // 3) the deployment default, from <html data-default-lang>. "auto" means
+    //    "follow the browser"; anything else is used literally.
+    var configured = document.documentElement.getAttribute('data-default-lang') || FALLBACK_LANG;
+    if (configured !== 'auto') return LANGS[configured] ? configured : FALLBACK_LANG;
+
+    var preferred = navigator.languages || [navigator.language || ''];
+    for (var i = 0; i < preferred.length; i++) {
+      var code = String(preferred[i]);
+      if (LANGS[code]) return code;
+      for (var known in LANGS) {
+        if (Object.prototype.hasOwnProperty.call(LANGS, known) &&
+            known.split('-')[0] === code.split('-')[0]) {
+          return known;
+        }
+      }
+    }
+    return FALLBACK_LANG;
+  }
+
+  function setLang(code, persist) {
+    if (!LANGS[code]) code = FALLBACK_LANG;
+    lang = code;
+    document.documentElement.lang = LANGS[lang].locale;
+    if (persist) writeLocal(KEYS.lang, code);
+    buildFormatters();
+    applyStaticStrings();
+    if ($('lang-select').value !== code) $('lang-select').value = code;
+  }
+
+  /** Re-renders everything that carries translated text. */
+  function redraw() {
+    applyTheme(document.documentElement.getAttribute('data-theme'));
+    syncSort();
+    updateMeta();
+    renderCards();
+    if (lastState && !report) {
+      showState(lastState, lastStateDetail);
+      updateCounter(0);
+    } else {
+      renderTable();
+    }
+  }
+
+  /* ================================================================
+   * Report normalization (accepts v2 and v1)
+   * ================================================================ */
+
+  function normalize(raw) {
+    var rep;
+
+    if (Array.isArray(raw)) {
+      // Legacy v1 format: a bare array (contract §1, "Compatibility").
+      rep = { schema_version: 1, results: raw };
+    } else if (raw && typeof raw === 'object') {
+      rep = {
+        schema_version: isNumber(raw.schema_version) ? raw.schema_version : 2,
+        generated_at: raw.generated_at,
+        duration_ms: raw.duration_ms,
+        alert_threshold_days: raw.alert_threshold_days,
+        critical_threshold_days: raw.critical_threshold_days,
+        summary: raw.summary,
+        results: Array.isArray(raw.results) ? raw.results : []
+      };
+    } else {
+      throw new Error('Unrecognized report format.');
+    }
+
+    rep.alertThreshold = isNumber(rep.alert_threshold_days) ? rep.alert_threshold_days : DEFAULT_ALERT_THRESHOLD;
+    rep.criticalThreshold = isNumber(rep.critical_threshold_days) ? rep.critical_threshold_days : DEFAULT_CRITICAL_THRESHOLD;
+    rep.generatedAt = validDate(rep.generated_at);
+    rep.legacy = rep.schema_version < 2;
+
+    rep.items = rep.results.map(function (item, i) {
+      return normalizeItem(item, i, rep);
+    });
+
+    return rep;
+  }
+
+  function normalizeItem(raw, index, rep) {
+    raw = (raw && typeof raw === 'object') ? raw : {};
+
+    var host = isText(raw.host) ? raw.host : '';
+    var port = isNumber(raw.port) ? raw.port : null;
+    var domain = isText(raw.domain) ? raw.domain : (host || '—');
+
+    // Derive host/port from domain when the backend did not send them (v1).
+    if (!host) {
+      var cut = domain.lastIndexOf(':');
+      if (cut > 0 && /^\d+$/.test(domain.slice(cut + 1))) {
+        host = domain.slice(0, cut);
+        if (port === null) port = parseInt(domain.slice(cut + 1), 10);
+      } else {
+        host = domain;
+      }
+    }
+
+    var days = isNumber(raw.days_remaining) ? raw.days_remaining : null;
+    var expiresAt = validDate(raw.expires_at);
+    var error = isText(raw.error) ? raw.error : '';
+
+    var status = isText(raw.status) ? String(raw.status).toLowerCase() : '';
+    if (!STATUS[status]) status = deriveStatus(raw, days, error, rep);
+
+    return {
+      index: index,
+      domain: domain,
+      host: host,
+      port: port,
+      status: status,
+      valid: raw.valid === true,
+      days: days,
+      expiresAt: expiresAt,
+      issuedAt: validDate(raw.issued_at),
+      checkedAt: validDate(raw.checked_at),
+      subject: isText(raw.subject) ? raw.subject : '',
+      issuer: isText(raw.issuer) ? raw.issuer : '',
+      serial: isText(raw.serial_number) ? raw.serial_number : '',
+      dnsNames: Array.isArray(raw.dns_names) ? raw.dns_names.filter(isText) : [],
+      tls: isText(raw.tls_version) ? raw.tls_version : '',
+      cipher: isText(raw.cipher_suite) ? raw.cipher_suite : '',
+      metadataInsecure: raw.metadata_insecure === true,
+      duration: isNumber(raw.duration_ms) ? raw.duration_ms : null,
+      attempts: isNumber(raw.attempts) ? raw.attempts : null,
+      error: error,
+      errorKind: isText(raw.error_kind) ? String(raw.error_kind).toLowerCase() : ''
+    };
+  }
+
+  /** Heuristic used only for the v1 format, which carries no `status`. */
+  function deriveStatus(raw, days, error, rep) {
+    if (raw.valid === false || raw.valid === undefined) {
+      if (isNumber(days) && days < 0) return 'expired';
+      if (/expir/i.test(error)) return 'expired';
+      if (error) return 'invalid';
+      return 'error';
+    }
+    if (!isNumber(days)) return 'ok';
+    if (days < 0) return 'expired';
+    if (days <= rep.criticalThreshold) return 'critical';
+    if (days <= rep.alertThreshold) return 'warning';
+    return 'ok';
+  }
+
+  function summarize(items) {
+    var s = { total: items.length, ok: 0, warning: 0, critical: 0, expired: 0, invalid: 0, error: 0 };
+    items.forEach(function (it) { if (s[it.status] !== undefined) s[it.status]++; });
+    return s;
+  }
+
+  /* ================================================================
+   * Filtering and sorting
+   * ================================================================ */
+
+  function visibleItems() {
+    var term = searchTerm.trim().toLowerCase();
+    var list = results.filter(function (it) {
+      if (statusFilter && it.status !== statusFilter) return false;
+      if (!term) return true;
+      var haystack = [it.domain, it.host, it.issuer, it.subject, it.error, it.errorKind]
+        .concat(it.dnsNames).join(' ').toLowerCase();
+      return haystack.indexOf(term) !== -1;
+    });
+    return sortList(list);
+  }
+
+  function sortList(list) {
+    var dir = sortState.direction === 'asc' ? 1 : -1;
+    var field = sortState.field;
+    var locale = LANGS[lang].locale;
+    var copy = list.slice();
+
+    copy.sort(function (a, b) {
+      var c = 0;
+      if (field === 'domain') {
+        c = a.domain.localeCompare(b.domain, locale, { numeric: true, sensitivity: 'base' });
+      } else if (field === 'status') {
+        c = STATUS[a.status].severity - STATUS[b.status].severity;
+        if (c === 0) c = dayValue(a) - dayValue(b);
+      } else if (field === 'days') {
+        c = dayValue(a) - dayValue(b);
+      } else if (field === 'expires') {
+        c = dateValue(a) - dateValue(b);
+      }
+      if (c === 0) c = a.domain.localeCompare(b.domain, locale, { numeric: true, sensitivity: 'base' });
+      return c * dir;
+    });
+    return copy;
+  }
+
+  // Items with no deadline (status=error) always sink to the bottom, in both
+  // directions.
+  function dayValue(it) {
+    if (it.status === 'error' || !isNumber(it.days)) return Number.POSITIVE_INFINITY;
+    return it.days;
+  }
+  function dateValue(it) {
+    return it.expiresAt ? it.expiresAt.getTime() : Number.POSITIVE_INFINITY;
+  }
+
+  /* ================================================================
+   * Rendering
+   * ================================================================ */
+
+  function renderCards() {
+    var target = $('cards');
+    target.textContent = '';
+    if (!report) return;
+
+    var summary = summarize(results);
+
+    CARD_ORDER.forEach(function (key) {
+      var n = summary[key] || 0;
+      var active = (key === 'total') ? (statusFilter === '') : (statusFilter === key);
+
+      var button = make('button', {
+        cls: 'card',
+        attrs: {
+          type: 'button',
+          'aria-pressed': active ? 'true' : 'false',
+          'data-empty': n === 0 ? 'yes' : 'no',
+          style: '--card-color: var(--' + key + '-color); --card-bg: var(--' + key +
+                 '-bg); --card-fg: var(--' + key + '-fg);'
+        },
+        children: [
+          make('span', {
+            cls: 'card-head',
+            children: [
+              icon(CARD_ICON[key], 14),
+              make('span', { cls: 'card-label', text: cardLabel(key) })
+            ]
+          }),
+          make('span', { cls: 'card-value', text: n })
+        ]
+      });
+
+      button.addEventListener('click', function () {
+        statusFilter = (key === 'total' || statusFilter === key) ? '' : key;
+        $('filter-status').value = statusFilter;
+        renderCards();
+        renderTable();
+      });
+
+      target.appendChild(button);
+    });
+  }
+
+  function renderTable() {
+    var body = $('tbody-results');
+    body.textContent = '';
+
+    var list = visibleItems();
+    updateCounter(list.length);
+    enableControls(list.length);
+
+    if (!report) return;
+
+    if (results.length === 0) {
+      showState('empty');
+      return;
+    }
+    if (list.length === 0) {
+      showState('no-match');
+      return;
+    }
+
+    hideState();
+
+    var frag = document.createDocumentFragment();
+    list.forEach(function (it) { buildRow(it, frag); });
+    body.appendChild(frag);
+  }
+
+  function buildRow(it, frag) {
+    var meta = STATUS[it.status];
+    var detailId = 'detail-' + it.index;
+    var open = expanded.has(it.domain);
+
+    var tr = make('tr', {
+      cls: 'row' + (open ? ' open' : ''),
+      attrs: { style: statusVars(it.status) }
+    });
+
+    /* --- Domain (doubles as the expand button) --- */
+    var name = make('span', { cls: 'domain-name', text: it.host });
+    if (it.port !== null && it.port !== undefined) {
+      name.appendChild(make('span', { cls: 'domain-port', text: ':' + it.port }));
+    }
+
+    var toggle = make('button', {
+      cls: 'toggle',
+      attrs: {
+        type: 'button',
+        'aria-expanded': open ? 'true' : 'false',
+        'aria-controls': detailId
+      },
+      children: [icon('i-chevron', 15, 'chevron'), name]
+    });
+
+    var tdDomain = make('td', { cls: 'cell-domain', children: [toggle] });
+
+    /* --- Status --- */
+    var badge = make('span', {
+      cls: 'badge',
+      children: [icon(meta.icon, 13), make('span', { text: statusLabel(it.status) })]
+    });
+    var tdStatus = make('td', {
+      cls: 'cell-status',
+      attrs: { 'data-label': t('col_status') },
+      children: [badge]
+    });
+
+    /* --- Time left (number + bar) --- */
+    var tdDeadline = make('td', {
+      attrs: { 'data-label': t('col_deadline') },
+      children: [buildDeadline(it)]
+    });
+
+    /* --- Expires on --- */
+    var tdExpires = make('td', { cls: 'cell-date', attrs: { 'data-label': t('col_expires') } });
+    if (it.expiresAt) {
+      tdExpires.appendChild(make('span', {
+        text: formatDate(it.expiresAt),
+        attrs: { title: formatDateTime(it.expiresAt) }
+      }));
+    } else {
+      tdExpires.appendChild(make('span', { cls: 'cell-empty', text: '—' }));
+    }
+
+    /* --- Issuer --- */
+    var tdIssuer = make('td', { cls: 'cell-issuer', attrs: { 'data-label': t('col_issuer') } });
+    if (it.issuer) {
+      tdIssuer.appendChild(make('span', { cls: 'trunc', text: it.issuer, attrs: { title: it.issuer } }));
+    } else if (it.errorKind && ERROR_KEYS[it.errorKind]) {
+      tdIssuer.appendChild(make('span', { cls: 'trunc cell-empty', text: errorLabel(it.errorKind) }));
+    } else {
+      tdIssuer.appendChild(make('span', { cls: 'cell-empty', text: '—' }));
+    }
+
+    tr.appendChild(tdDomain);
+    tr.appendChild(tdStatus);
+    tr.appendChild(tdDeadline);
+    tr.appendChild(tdExpires);
+    tr.appendChild(tdIssuer);
+
+    /* --- Detail row --- */
+    var trDetail = make('tr', { cls: 'detail', attrs: { id: detailId } });
+    if (!open) trDetail.hidden = true;
+    var tdDetail = make('td', { attrs: { colspan: '5' }, children: [buildDetail(it)] });
+    trDetail.appendChild(tdDetail);
+
+    toggle.addEventListener('click', function () {
+      var nowOpen = !expanded.has(it.domain);
+      if (nowOpen) expanded.add(it.domain); else expanded.delete(it.domain);
+      toggle.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      tr.classList.toggle('open', nowOpen);
+      trDetail.hidden = !nowOpen;
+    });
+
+    frag.appendChild(tr);
+    frag.appendChild(trDetail);
+  }
+
+  function statusVars(status) {
+    return '--st-bg: var(--' + status + '-bg);' +
+           '--st-fg: var(--' + status + '-fg);' +
+           '--st-color: var(--' + status + '-color);';
+  }
+
+  function buildDeadline(it) {
+    var box = make('div', { cls: 'deadline' });
+
+    if (it.status === 'error') {
+      box.appendChild(make('span', { cls: 'deadline-text deadline-none', text: t('deadline_no_cert') }));
+      return box;
+    }
+
+    // Without a readable expiry date there is no trustworthy deadline (common
+    // in the v1 format, where expires_at is zeroed and days_remaining is just
+    // a marker).
+    if (!isNumber(it.days) || !it.expiresAt) {
+      box.appendChild(make('span', { cls: 'deadline-text deadline-none', text: t('deadline_no_data') }));
+      return box;
+    }
+
+    var days = it.days;
+    var text;
+    if (days < 0) text = t('deadline_expired_ago', { n: Math.abs(days) });
+    else if (days === 0) text = t('deadline_today');
+    else text = t('deadline_days', { n: days });
+
+    var highlight = (it.status !== 'ok');
+    box.appendChild(make('span', {
+      cls: 'deadline-text' + (highlight ? ' attention' : ''),
+      text: text
+    }));
+
+    var pct = Math.max(0, Math.min(100, (days / BAR_SCALE_DAYS) * 100));
+    var track = make('div', {
+      cls: 'track',
+      attrs: {
+        role: 'img',
+        'aria-label': t('deadline_scale', { text: text, days: BAR_SCALE_DAYS })
+      },
+      children: [make('i', { attrs: { style: 'width:' + pct.toFixed(1) + '%' } })]
+    });
+    box.appendChild(track);
+    return box;
+  }
+
+  function buildDetail(it) {
+    var grid = make('dl', { cls: 'detail-grid' });
+
+    function pair(label, value, options) {
+      options = options || {};
+      if (!isText(value)) return;
+      var block = make('div', { cls: 'detail-item' + (options.wide ? ' detail-wide' : '') });
+      block.appendChild(make('dt', { text: label }));
+      block.appendChild(make('dd', { cls: options.cls || '', text: value }));
+      grid.appendChild(block);
+    }
+
+    pair(t('det_domain'), it.domain);
+    pair(t('det_issuer'), it.issuer);
+    pair(t('det_subject'), it.subject);
+    pair(t('det_serial'), it.serial, { cls: 'mono' });
+    pair(t('det_tls'), it.tls);
+    pair(t('det_cipher'), it.cipher, { cls: 'mono' });
+    if (it.issuedAt) pair(t('det_issued_at'), formatDateTime(it.issuedAt));
+    if (it.expiresAt) pair(t('det_expires_at'), formatDateTime(it.expiresAt));
+    if (it.checkedAt) pair(t('det_checked_at'), formatDateTime(it.checkedAt));
+    if (isNumber(it.duration)) pair(t('det_duration'), formatDuration(it.duration));
+    if (isNumber(it.attempts)) {
+      pair(t('det_attempts'), t('det_attempts_value', { n: it.attempts }));
+    }
+    if (it.errorKind) pair(t('det_error_kind'), errorLabel(it.errorKind));
+
+    if (it.dnsNames.length) {
+      var block = make('div', { cls: 'detail-item detail-wide' });
+      block.appendChild(make('dt', { text: t('sans_title', { n: it.dnsNames.length }) }));
+      var chips = make('div', { cls: 'chips' });
+      var dd = make('dd');
+      dd.appendChild(chips);
+
+      // A CDN certificate often carries hundreds of SANs; showing them all at
+      // once turns the panel into a wall. Cut at SAN_LIMIT and put the rest
+      // behind a button.
+      var SAN_LIMIT = 24;
+      var showAll = false;
+      function paintSans() {
+        while (chips.firstChild) chips.removeChild(chips.firstChild);
+        var list = showAll ? it.dnsNames : it.dnsNames.slice(0, SAN_LIMIT);
+        list.forEach(function (n) {
+          // textContent: a SAN is content controlled by the remote host.
+          chips.appendChild(make('span', { cls: 'chip', text: n }));
+        });
+      }
+      paintSans();
+
+      if (it.dnsNames.length > SAN_LIMIT) {
+        var remaining = it.dnsNames.length - SAN_LIMIT;
+        var btn = make('button', {
+          cls: 'btn-plain',
+          text: t('sans_more', { n: remaining }),
+          attrs: { type: 'button', 'aria-expanded': 'false' }
+        });
+        btn.addEventListener('click', function () {
+          showAll = !showAll;
+          paintSans();
+          btn.setAttribute('aria-expanded', showAll ? 'true' : 'false');
+          btn.textContent = showAll ? t('sans_less') : t('sans_more', { n: remaining });
+        });
+        dd.appendChild(btn);
+      }
+
+      block.appendChild(dd);
+      grid.appendChild(block);
+    }
+
+    if (it.error) {
+      var errorBlock = make('div', { cls: 'detail-item detail-wide' });
+      errorBlock.appendChild(make('dt', { text: t('det_error_message') }));
+      // The error string can embed the CN/SAN of the remote certificate
+      // (x509.HostnameError): third-party content. textContent is mandatory here.
+      errorBlock.appendChild(make('dd', { cls: 'mono detail-error', text: it.error }));
+      grid.appendChild(errorBlock);
+    }
+
+    if (!grid.children.length) {
+      grid.appendChild(make('div', {
+        cls: 'detail-item detail-wide',
+        children: [make('dd', { cls: 'cell-empty', text: t('det_none') })]
+      }));
+    }
+
+    var content = [];
+    if (it.metadataInsecure) {
+      // Verification failed; this data came from a handshake WITHOUT
+      // validation, done only for diagnosis. Whoever reads the panel must know.
+      var warning = make('div', { cls: 'provenance', attrs: { role: 'note' } });
+      warning.appendChild(icon('i-warning', 15));
+      var warningText = make('div');
+      warningText.appendChild(make('b', { text: t('provenance_title') }));
+      warningText.appendChild(document.createTextNode(t('provenance_text')));
+      warning.appendChild(warningText);
+      content.push(warning);
+    }
+    content.push(grid);
+
+    return make('div', { cls: 'detail-box', children: content });
+  }
+
+  /* ================================================================
+   * States (loading / empty / error / no results)
+   * ================================================================ */
+
+  function showState(kind, detail) {
+    lastState = kind;
+    lastStateDetail = detail !== undefined ? detail : null;
+
+    var box = $('state');
+    box.textContent = '';
+    box.className = 'state';
+    box.hidden = false;
+    $('table-wrap').hidden = true;
+
+    if (kind === 'loading') {
+      box.appendChild(icon('i-refresh', 26, 'spinning'));
+      box.appendChild(make('p', { cls: 'state-title', text: t('loading_report') }));
+      return;
+    }
+
+    if (kind === 'empty') {
+      box.appendChild(icon('i-box', 30));
+      box.appendChild(make('p', { cls: 'state-title', text: t('state_empty_title') }));
+      box.appendChild(fillSegments(make('p', { cls: 'state-text' }), 'state_empty_text'));
+      return;
+    }
+
+    if (kind === 'no-match') {
+      box.appendChild(icon('i-filter', 28));
+      box.appendChild(make('p', { cls: 'state-title', text: t('state_nofilter_title') }));
+      box.appendChild(make('p', { cls: 'state-text', text: t('state_nofilter_text') }));
+      var button = make('button', { cls: 'btn', text: t('clear_filters'), attrs: { type: 'button' } });
+      button.addEventListener('click', clearFilters);
+      box.appendChild(button);
+      return;
+    }
+
+    if (kind === 'failed') {
+      box.className = 'state failed';
+      box.appendChild(icon('i-alert-circle', 30));
+      box.appendChild(make('p', { cls: 'state-title', text: t('state_failed_title') }));
+      box.appendChild(fillSegments(make('p', { cls: 'state-text' }), 'state_failed_text'));
+
+      if (location.protocol === 'file:') {
+        box.appendChild(fillSegments(make('p', { cls: 'state-text' }), 'state_failed_file'));
+      }
+      if (lastStateDetail) {
+        box.appendChild(make('p', { cls: 'state-text mono', text: String(lastStateDetail) }));
+      }
+      return;
+    }
+  }
+
+  function hideState() {
+    lastState = null;
+    lastStateDetail = null;
+    $('state').hidden = true;
+    $('state').textContent = '';
+    $('table-wrap').hidden = false;
+  }
+
+  function clearFilters() {
+    statusFilter = '';
+    searchTerm = '';
+    $('search').value = '';
+    $('filter-status').value = '';
+    $('clear-search').hidden = true;
+    renderCards();
+    renderTable();
+    $('search').focus();
+  }
+
+  /** Disables the controls that make no sense without loaded data. */
+  function enableControls(visible) {
+    var hasData = !!report && results.length > 0;
+    ['search', 'filter-status', 'sort-field', 'sort-direction'].forEach(function (id) {
+      $(id).disabled = !hasData;
+    });
+    $('btn-csv').disabled = !hasData || visible === 0;
+  }
+
+  function updateCounter(visible) {
+    var total = results.length;
+    var target = $('counter');
+    if (!report) { target.textContent = ''; return; }
+    target.textContent = (visible === total)
+      ? t('counter_total', { n: total })
+      : t('counter_filtered', { shown: visible, total: total, n: total });
+  }
+
+  /* ================================================================
+   * Report metadata (generated_at + relative time + badge)
+   * ================================================================ */
+
+  function updateMeta() {
+    var target = $('meta-text');
+    var badge = $('stale-badge');
+
+    if (!report) {
+      target.textContent = t(lastState === 'failed' ? 'report_unavailable' : 'loading_report');
+      badge.hidden = true;
+      return;
+    }
+
+    if (!report.generatedAt) {
+      target.textContent = t('report_no_timestamp');
+      badge.hidden = true;
+      return;
+    }
+
+    var parts = [t('meta_checked', {
+      when: formatDateTime(report.generatedAt),
+      relative: relativeTime(report.generatedAt)
+    })];
+    if (isNumber(report.duration_ms)) {
+      parts.push(t('meta_duration', { duration: formatDuration(report.duration_ms) }));
+    }
+    parts.push(t('meta_thresholds', {
+      alert: report.alertThreshold, critical: report.criticalThreshold
+    }));
+    target.textContent = parts.join(' · ');
+
+    var age = Date.now() - report.generatedAt.getTime();
+    badge.hidden = !(age > STALE_AFTER_MS);
+  }
+
+  /* ================================================================
+   * Loading
+   * ================================================================ */
+
+  function load() {
+    if (loading) return;
+    loading = true;
+    $('icon-refresh').classList.add('spinning');
+    if (!report) showState('loading');
+
+    // Cache buster + no-store: the report changes on every sslscout run.
+    fetch('report.json?_=' + Date.now(), { cache: 'no-store' })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + resp.statusText);
+        return resp.json();
+      })
+      .then(function (data) {
+        report = normalize(data);
+        results = report.items;
+        $('v1-notice').hidden = !report.legacy;
+        updateMeta();
+        renderCards();
+        renderTable();
+        announce(t('announce_updated', { n: results.length }));
+      })
+      .catch(function (err) {
+        console.warn('Could not load the report:', err && err.message ? err.message : err);
+        report = null;
+        results = [];
+        $('cards').textContent = '';
+        $('tbody-results').textContent = '';
+        $('counter').textContent = '';
+        $('stale-badge').hidden = true;
+        enableControls(0);
+        showState('failed', err && err.message ? err.message : String(err));
+        $('meta-text').textContent = t('report_unavailable');
+        announce(t('announce_failed'));
+      })
+      .then(function () {
+        loading = false;
+        $('icon-refresh').classList.remove('spinning');
+      });
+  }
+
+  function announce(msg) { $('announce').textContent = msg; }
+
+  /* ================================================================
+   * CSV export (generated in the browser)
+   * ================================================================
+   * The header row keeps the report.json field names on purpose: the export is
+   * meant to be machine readable, so it is not translated.
+   */
+
+  var CSV_COLUMNS = [
+    ['domain', function (it) { return it.domain; }],
+    ['host', function (it) { return it.host; }],
+    ['port', function (it) { return it.port === null ? '' : it.port; }],
+    ['status', function (it) { return it.status; }],
+    ['days_remaining', function (it) { return isNumber(it.days) ? it.days : ''; }],
+    ['expires_at', function (it) { return it.expiresAt ? it.expiresAt.toISOString() : ''; }],
+    ['issued_at', function (it) { return it.issuedAt ? it.issuedAt.toISOString() : ''; }],
+    ['issuer', function (it) { return it.issuer; }],
+    ['subject', function (it) { return it.subject; }],
+    ['serial_number', function (it) { return it.serial; }],
+    ['dns_names', function (it) { return it.dnsNames.join(' '); }],
+    ['tls_version', function (it) { return it.tls; }],
+    ['cipher_suite', function (it) { return it.cipher; }],
+    ['checked_at', function (it) { return it.checkedAt ? it.checkedAt.toISOString() : ''; }],
+    ['duration_ms', function (it) { return isNumber(it.duration) ? it.duration : ''; }],
+    ['attempts', function (it) { return isNumber(it.attempts) ? it.attempts : ''; }],
+    ['error_kind', function (it) { return it.errorKind; }],
+    ['error', function (it) { return it.error; }]
+  ];
+
+  function csvField(value) {
+    var s = String(value === null || value === undefined ? '' : value);
+    // Defensive prefix against spreadsheet formulas (CSV injection).
+    // Negative numbers (days_remaining) are preserved as numbers.
+    if (/^[=+@\t\r]/.test(s) || (s.charAt(0) === '-' && !/^-\d+(\.\d+)?$/.test(s))) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+
+  function exportCsv() {
+    var list = visibleItems();
+    if (!list.length) { announce(t('announce_nothing')); return; }
+
+    var lines = [CSV_COLUMNS.map(function (c) { return csvField(c[0]); }).join(',')];
+    list.forEach(function (it) {
+      lines.push(CSV_COLUMNS.map(function (c) { return csvField(c[1](it)); }).join(','));
+    });
+
+    var content = '﻿' + lines.join('\r\n') + '\r\n';
+    var blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.href = url;
+    a.download = 'sslscout-' + stamp + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    announce(t('announce_exported', { n: list.length }));
+  }
+
+  /* ================================================================
+   * Theme
+   * ================================================================ */
+
+  function applyTheme(theme) {
+    // '' = follow the system preference.
+    document.documentElement.setAttribute('data-theme', theme || '');
+    var dark = theme === 'dark' ||
+      (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var use = $('icon-theme').firstElementChild;
+    use.setAttribute('href', dark ? '#i-sun' : '#i-moon');
+    var btn = $('btn-theme');
+    btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+    btn.title = dark ? t('theme_to_light') : t('theme_to_dark');
+    $('label-theme').textContent = btn.title;
+  }
+
+  function toggleTheme() {
+    var current = document.documentElement.getAttribute('data-theme');
+    var darkNow = current === 'dark' ||
+      (!current && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = darkNow ? 'light' : 'dark';
+    applyTheme(next);
+    writeLocal(KEYS.theme, next);
+  }
+
+  /* ================================================================
+   * Sorting: headers + mobile controls
+   * ================================================================ */
+
+  function setSort(field) {
+    if (sortState.field === field) {
+      sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortState.field = field;
+      // Domain starts A→Z; the others start with the worst/most urgent case.
+      sortState.direction = (field === 'domain') ? 'asc' : (field === 'status' ? 'desc' : 'asc');
+    }
+    syncSort();
+    renderTable();
+  }
+
+  function syncSort() {
+    var ths = document.querySelectorAll('th.sortable');
+    for (var i = 0; i < ths.length; i++) {
+      var field = ths[i].getAttribute('data-field');
+      ths[i].setAttribute('aria-sort',
+        field === sortState.field ? (sortState.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+    }
+    $('sort-field').value = sortState.field;
+    var btn = $('sort-direction');
+    var asc = sortState.direction === 'asc';
+    btn.title = asc ? t('sort_asc_title') : t('sort_desc_title');
+    $('icon-sort').style.transform = asc ? '' : 'rotate(180deg)';
+  }
+
+  /* ================================================================
+   * Auto-refresh
+   * ================================================================ */
+
+  function setupAuto() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    var on = $('chk-auto').checked;
+    var interval = parseInt($('sel-interval').value, 10) || 60000;
+    $('sel-interval').disabled = !on;
+    if (on) autoTimer = setInterval(load, interval);
+    writeLocal(KEYS.auto, on ? '1' : '0');
+    writeLocal(KEYS.interval, String(interval));
+  }
+
+  /* ================================================================
+   * Start-up
+   * ================================================================ */
+
+  function start() {
+    // Language: fill the picker before anything reads a translated string.
+    var picker = $('lang-select');
+    LANG_ORDER.forEach(function (code) {
+      if (!LANGS[code]) return;
+      picker.appendChild(make('option', { text: LANGS[code].name, attrs: { value: code } }));
+    });
+    setLang(resolveLang(), false);
+    picker.addEventListener('change', function () {
+      setLang(this.value, true);
+      redraw();
+    });
+
+    // Theme
+    var savedTheme = readLocal(KEYS.theme);
+    applyTheme(savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : '');
+    $('btn-theme').addEventListener('click', toggleTheme);
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function () {
+        if (!document.documentElement.getAttribute('data-theme')) applyTheme('');
+      };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);
+    }
+
+    // Auto-refresh
+    var savedAuto = readLocal(KEYS.auto);
+    var savedInterval = readLocal(KEYS.interval);
+    if (savedInterval && /^\d+$/.test(savedInterval)) {
+      var options = $('sel-interval').options;
+      for (var o = 0; o < options.length; o++) {
+        if (options[o].value === savedInterval) { $('sel-interval').value = savedInterval; break; }
+      }
+    }
+    $('chk-auto').checked = savedAuto === '1';
+    $('sel-interval').disabled = !$('chk-auto').checked;
+    if ($('chk-auto').checked) setupAuto();
+    $('chk-auto').addEventListener('change', setupAuto);
+    $('sel-interval').addEventListener('change', setupAuto);
+
+    // Search
+    var search = $('search');
+    search.addEventListener('input', function () {
+      searchTerm = search.value;
+      $('clear-search').hidden = searchTerm === '';
+      renderTable();
+    });
+    $('clear-search').addEventListener('click', function () {
+      search.value = ''; searchTerm = '';
+      $('clear-search').hidden = true;
+      renderTable();
+      search.focus();
+    });
+
+    // Status filter
+    $('filter-status').addEventListener('change', function () {
+      statusFilter = this.value;
+      renderCards();
+      renderTable();
+    });
+
+    // Sorting
+    var ths = document.querySelectorAll('th.sortable');
+    for (var i = 0; i < ths.length; i++) {
+      (function (th) {
+        th.querySelector('button').addEventListener('click', function () {
+          setSort(th.getAttribute('data-field'));
+        });
+      })(ths[i]);
+    }
+    $('sort-field').addEventListener('change', function () {
+      sortState.field = this.value;
+      syncSort();
+      renderTable();
+    });
+    $('sort-direction').addEventListener('click', function () {
+      sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+      syncSort();
+      renderTable();
+    });
+    syncSort();
+
+    // Actions
+    $('btn-refresh').addEventListener('click', load);
+    $('btn-csv').addEventListener('click', exportCsv);
+
+    // Shortcut: "/" focuses the search box.
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === '/' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        var target = ev.target;
+        var tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'select' || tag === 'textarea' || (target && target.isContentEditable)) return;
+        ev.preventDefault();
+        search.focus();
+        search.select();
+      }
+    });
+
+    // Keeps the "N minutes ago" alive without re-fetching.
+    relativeTimer = setInterval(updateMeta, 30000);
+
+    enableControls(0);
+    load();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
+</script>
+</body>
+</html>

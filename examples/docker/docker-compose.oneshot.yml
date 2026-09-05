@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# One-shot variant: the check runs once and the container exits, while nginx
+# stays up serving whatever the last run produced. This is the shape to use
+# when the host already has a scheduler (cron, systemd timer, a CI job) and you
+# do not want a process sleeping between checks.
+#
+# Run it from the repository root:
+#
+#   docker compose -f examples/docker/docker-compose.oneshot.yml up -d web
+#   docker compose -f examples/docker/docker-compose.oneshot.yml run --rm check
+#
+# and put the second line in cron:
+#
+#   30 6 * * *  cd /opt/sslscout && docker compose \
+#                 -f examples/docker/docker-compose.oneshot.yml run --rm check
+#
+# The exit code is the binary's own, so -fail-on works and cron reports a
+# failing run.
+# ---------------------------------------------------------------------------
+
+name: sslscout-oneshot
+
+services:
+
+  check:
+    build:
+      context: ../..
+    image: sslscout:latest
+    # No restart policy: this container is supposed to exit.
+    command:
+      - -domains=/app/domains.txt
+      - -config=/app/config.json
+      - -out=/app/public/report.json
+      - -quiet
+    environment:
+      TZ: ${TZ:-UTC}
+      SSLSCOUT_LANG: ${SSLSCOUT_LANG:-en}
+      SSLSCOUT_SLACK_WEBHOOK_URL: ${SSLSCOUT_SLACK_WEBHOOK_URL:-}
+      SSLSCOUT_TEAMS_WEBHOOK_URL: ${SSLSCOUT_TEAMS_WEBHOOK_URL:-}
+      SSLSCOUT_SMTP_USERNAME: ${SSLSCOUT_SMTP_USERNAME:-}
+      SSLSCOUT_SMTP_PASSWORD: ${SSLSCOUT_SMTP_PASSWORD:-}
+    volumes:
+      - ../../domains.txt:/app/domains.txt:ro
+      - ../../config.json:/app/config.json:ro
+      - public:/app/public
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${SSLSCOUT_BIND:-127.0.0.1}:${SSLSCOUT_PORT:-8080}:80"
+    volumes:
+      - public:/usr/share/nginx/html:ro
+      - ../../public/index.html:/usr/share/nginx/html/index.html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  public:

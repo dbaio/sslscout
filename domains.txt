@@ -1,0 +1,21 @@
+# SSLScout domain list
+#
+# One entry per line. "#" starts a comment (whole line or trailing), blank
+# lines are ignored and duplicates are dropped while the original order is
+# preserved.
+#
+# Accepted formats:
+#   domain                     -> port 443
+#   domain:port                -> explicit port (e.g. smtp.example.com:465)
+#   https://domain/path        -> host and port are taken from the URL
+#
+# Commented examples:
+#   smtp.example.com:465       # SMTP over implicit TLS
+#   https://api.example.com/v1 # the path is ignored, host:port is what counts
+#   ldap.example.com:636       # any service that performs a TLS handshake
+
+google.com
+github.com
+expired.badssl.com          # expired certificate  -> status "expired"
+wrong.host.badssl.com       # name does not match  -> status "invalid"
+self-signed.badssl.com      # untrusted chain      -> status "invalid"

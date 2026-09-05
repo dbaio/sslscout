@@ -1,0 +1,35 @@
+# Example of scheduling SSLScout with cron.
+#
+# Installation (Linux, system-wide file):
+#   sudo install -m 0644 examples/crontab /etc/cron.d/sslscout
+#
+# Or, for a user crontab (drop the user column, which is the 6th):
+#   crontab -e
+#
+# Assumed layout:
+#   /opt/sslscout/sslscout       the binary
+#   /opt/sslscout/domains.txt    the domain list
+#   /opt/sslscout/config.json    the configuration (mode 0600, owned by sslscout)
+#   /opt/sslscout/public/        dashboard + generated report.json
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SHELL=/bin/sh
+
+# Mails any unexpected output (errors from the binary itself).
+MAILTO=sre@example.com
+
+# One check per day, at 06:30. -quiet keeps cron silent when all is well;
+# errors still go to stderr and from there to MAILTO.
+30 6 * * *   sslscout   cd /opt/sslscout && ./sslscout -quiet
+
+# A more aggressive variant: hourly, with no notifications (it only refreshes
+# the dashboard), leaving the alerts to the daily run above.
+# 5 * * * *    sslscout   cd /opt/sslscout && ./sslscout -quiet -notify=false
+
+# A variant for a pipeline/monitoring job: exits non-zero if any certificate is
+# critical or worse, which makes cron send the mail.
+# 0 7 * * *    sslscout   cd /opt/sslscout && ./sslscout -quiet -fail-on critical
+
+# Alerts in Brazilian Portuguese instead of the default English. This can also
+# live in config.json ("language": "pt-BR") or in SSLSCOUT_LANG.
+# 30 6 * * *   sslscout   cd /opt/sslscout && ./sslscout -quiet -lang pt-BR

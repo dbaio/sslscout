@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------
+# SSLScout with Docker Compose
+#
+#   docker compose up -d          # run the checker + serve the dashboard
+#   open http://localhost:8080
+#
+# Two services:
+#
+#   sslscout  runs the check and rewrites report.json on the interval set in
+#             SSLSCOUT_INTERVAL. It never listens on a port: serving is nginx's
+#             job (the built-in -serve exists for development, not for hosting).
+#   web       nginx serving public/ as plain static files. It has no idea
+#             SSLScout exists — it just publishes the directory.
+#
+# The two exchange data through the named volume "public". Using a volume
+# instead of a bind mount avoids the usual permission fight: the image runs as
+# uid 10001, and a host directory owned by your user would not be writable.
+# On the first "up" Docker seeds the volume with the image content, so the
+# dashboard is there before the first check finishes.
+#
+# index.html is *also* bind-mounted read-only into nginx, so editing the
+# dashboard on the host and reloading the page is enough — no volume rebuild.
+#
+# Before the first run:
+#   cp config.example.json config.json && chmod 600 config.json
+#   cp examples/docker/env.example .env      # optional: secrets and settings
+# ---------------------------------------------------------------------------
+
+services:
+
+  sslscout:
+    build:
+      context: .
+      args:
+        VERSION: ${SSLSCOUT_VERSION:-docker}
+    image: sslscout:latest
+    container_name: sslscout
+    restart: unless-stopped
+    command:
+      - -domains=/app/domains.txt
+      - -config=/app/config.json
+      - -out=/app/public/report.json
+      - -interval=${SSLSCOUT_INTERVAL:-12h}
+    environment:
+      # Timestamps in the container log follow this zone. The report itself is
+      # always written in UTC.
+      TZ: ${TZ:-UTC}
+      # Alert language: en (default) or pt-BR. It overrides "language" in
+      # config.json; see the i18n section of the README.
+      SSLSCOUT_LANG: ${SSLSCOUT_LANG:-en}
+      # Secrets. Keep them in .env (git-ignored), never in the compose file.
+      SSLSCOUT_SLACK_WEBHOOK_URL: ${SSLSCOUT_SLACK_WEBHOOK_URL:-}
+      SSLSCOUT_TEAMS_WEBHOOK_URL: ${SSLSCOUT_TEAMS_WEBHOOK_URL:-}
+      SSLSCOUT_SMTP_USERNAME: ${SSLSCOUT_SMTP_USERNAME:-}
+      SSLSCOUT_SMTP_PASSWORD: ${SSLSCOUT_SMTP_PASSWORD:-}
+    volumes:
+      - ./domains.txt:/app/domains.txt:ro
+      - ./config.json:/app/config.json:ro
+      - public:/app/public
+    # The check is outbound-only; it never accepts a connection.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  web:
+    image: nginx:1.27-alpine
+    container_name: sslscout-web
+    restart: unless-stopped
+    depends_on:
+      - sslscout
+    # 127.0.0.1 on purpose: the dashboard has no authentication of its own.
+    # Publish it wider only behind a reverse proxy with TLS and access control.
+    ports:
+      - "${SSLSCOUT_BIND:-127.0.0.1}:${SSLSCOUT_PORT:-8080}:80"
+    volumes:
+      - public:/usr/share/nginx/html:ro
+      # Serve the dashboard straight from the working tree, so editing it does
+      # not require recreating the volume.
+      - ./public/index.html:/usr/share/nginx/html/index.html:ro
+      - ./examples/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  public:
