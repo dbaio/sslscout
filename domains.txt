@@ -8,14 +8,27 @@
 #   domain                     -> port 443
 #   domain:port                -> explicit port (e.g. smtp.example.com:465)
 #   https://domain/path        -> host and port are taken from the URL
+#   smtp://domain              -> STARTTLS: the certificate only shows up after
+#                                 the plaintext protocol agrees to upgrade
+#
+# Schemes that negotiate: smtp (587), imap (143), pop3 (110), ldap (389),
+# postgres (5432). The port alone is enough for those five defaults; the scheme
+# is how you say it on a non-standard port. "tls://host:port" forces a direct
+# handshake when the guess would be wrong.
 #
 # Commented examples:
 #   smtp.example.com:465       # SMTP over implicit TLS
+#   smtp.example.com:587       # SMTP over STARTTLS (inferred from the port)
+#   smtp://relay.example.com:2525
+#   imap://mail.example.com    # IMAP + STARTTLS on 143
+#   ldap://ldap.example.com    # LDAP + StartTLS on 389
+#   postgres://db.example.com  # PostgreSQL SSLRequest on 5432
 #   https://api.example.com/v1 # the path is ignored, host:port is what counts
-#   ldap.example.com:636       # any service that performs a TLS handshake
+#   ldap.example.com:636       # LDAPS: implicit TLS, no negotiation
 
 google.com
-smtp.fastmail.com:465
+smtp.fastmail.com:465       # implicit TLS
+smtp.fastmail.com:587       # same host, STARTTLS on the submission port
 github.com
 expired.badssl.com          # expired certificate  -> status "expired"
 wrong.host.badssl.com       # name does not match  -> status "invalid"

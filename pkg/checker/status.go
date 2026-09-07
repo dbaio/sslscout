@@ -137,6 +137,16 @@ func classify(err error) failure {
 		return failure{kind: KindUntrusted, status: StatusInvalid, certErr: true}
 	}
 
+	// --- Plaintext negotiation ---
+	// The server answered, and the answer was a refusal: no upgrade, wrong
+	// banner, SSL disabled. Retrying replays the same conversation, so this is
+	// permanent. An I/O failure during the same dialogue is NOT wrapped in this
+	// type, and falls through to the network cases below where it belongs.
+	var upgradeErr *startTLSError
+	if errors.As(err, &upgradeErr) {
+		return failure{kind: KindProtocol, status: StatusError}
+	}
+
 	// --- Network failures ---
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {

@@ -445,11 +445,12 @@ One entry per line. The rules are:
   the end of the line.
 - Blank lines are ignored.
 - Duplicates are dropped, preserving the original order of appearance.
-- Three entry formats are accepted:
+- Four entry formats are accepted:
   1. `domain` — port 443 is assumed;
   2. `domain:port` — for TLS services outside 443;
   3. `https://domain/path` — the URL is accepted and only host and port are
-     extracted; the path is discarded.
+     extracted; the path is discarded;
+  4. `smtp://domain` — a scheme that names a STARTTLS protocol (below).
 
 ```
 # SSLScout domain list
@@ -470,6 +471,60 @@ https://internal.example.com:9443/health
 
 Every entry above is normalized to the `host:port` form in the report — that is
 what shows up in the `domain` field.
+
+### STARTTLS
+
+Not every certificate is behind a direct TLS handshake. On the submission port,
+on an LDAP directory or on a PostgreSQL instance the connection starts in the
+clear and the server only presents its certificate after the protocol agrees to
+upgrade. Dialling TLS straight at those ports gets you silence or a protocol
+error — from a service that is perfectly healthy.
+
+Five negotiations are supported:
+
+| Scheme | Default port | How the upgrade is requested |
+| --- | --- | --- |
+| `smtp://` (or `submission://`) | 587 | `EHLO`, then `STARTTLS` |
+| `imap://` | 143 | `a001 STARTTLS` |
+| `pop3://` | 110 | `STLS` |
+| `ldap://` | 389 | Extended Request with OID `1.3.6.1.4.1.1466.20037` |
+| `postgres://` (or `postgresql://`) | 5432 | `SSLRequest` packet |
+
+There are two ways to ask for one, and they exist for different situations:
+
+```
+# 1) The scheme says it outright. Use it on non-standard ports.
+smtp://relay.example.com:2525
+imap://mail.example.com
+postgres://db.example.com:6432
+
+# 2) On the classic ports nothing has to be said at all — the port implies it.
+mail.example.com:587        # same as smtp://mail.example.com
+ldap.example.com:389        # same as ldap://ldap.example.com
+db.example.com:5432         # same as postgres://db.example.com
+```
+
+The inference covers 25, 587, 2525, 143, 110, 389 and 5432. Every one of them
+is a cleartext port whose TLS twin lives elsewhere — 587 upgrades while 465 is
+implicit, 143 upgrades while 993 is implicit — so it cannot shadow a service
+that would have answered a direct handshake. The ports that *are* implicit
+(443, 465, 636, 993, 995, 990) keep working exactly as before.
+
+When the guess is wrong anyway — an implicit-TLS service parked on 587, say —
+`tls://` forces a direct handshake on any port:
+
+```
+tls://mail.example.com:587
+```
+
+A server that refuses the upgrade comes back as `error_kind: protocol` with the
+reply it sent (`the server answered "502 5.5.1 unknown command"`), and is never
+retried: the same conversation would only be replayed.
+
+The negotiation that was used appears in the report as `starttls`, so nothing
+about an inferred entry is invisible. MySQL is deliberately absent — its
+handshake needs a capability exchange before the upgrade, and it is the one
+protocol of the set where a certificate check is rarely what you want.
 
 ---
 
@@ -573,6 +628,7 @@ Always present:
 | `domain` | string | The normalized entry, in `host:port` form. |
 | `host` | string | Host name. |
 | `port` | int | Port used for the connection. |
+| `starttls` | string | Absent for implicit TLS. Otherwise the negotiated protocol: `smtp`, `imap`, `pop3`, `ldap` or `postgres`. |
 | `status` | string | One of `ok`, `warning`, `critical`, `expired`, `invalid`, `error`. |
 | `valid` | bool | `true` only when `status` is `ok`, `warning` or `critical`. |
 | `days_remaining` | int | Days until expiry. Can be negative when the certificate has already expired. Omitted or `0` when `status` is `error`. |
@@ -1146,7 +1202,7 @@ kind of problem you have.
 | `untrusted` | The chain does not reach a trusted root. | Usually the intermediate certificate is missing on the server: check with `openssl s_client -showcerts -connect host:443`. With an internal CA, install the root in the system store — in a container, mount it and run `update-ca-certificates`. If **every** domain came back `untrusted`, the problem is the environment: the `ca-certificates` package is missing. |
 | `not_yet_valid` | `NotBefore` has not arrived yet. | Almost always the clock of the machine running SSLScout is wrong. Check `timedatectl` / NTP. It can also be a certificate issued with a future date. |
 | `no_certificate` | The connection completed but no certificate was presented. | The port probably does not speak TLS (e.g. 80 instead of 443), or the service requires SNI and has no default certificate. |
-| `protocol` | TLS protocol error. | The service may not speak TLS on that port, or may only accept old versions Go refuses. Check with `openssl s_client -connect host:port`. |
+| `protocol` | TLS protocol error, or a refused STARTTLS upgrade. | The `error` field says which, and a refusal quotes the server's own reply. If the service speaks a plaintext protocol first, name it: `smtp://host:2525` rather than `host:2525` on a non-standard port. If it is the opposite — implicit TLS on a port SSLScout guessed was STARTTLS — force it with `tls://host:port`. Otherwise the service may not speak TLS there at all, or only accept versions Go refuses: check with `openssl s_client -connect host:port` (add `-starttls smtp` for the submission port). |
 | `other` | Unclassified failure. | Read the `error` field, which carries the original message. |
 
 Other common problems:

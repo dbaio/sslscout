@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"math"
+	"net"
 	"time"
 )
 
@@ -23,9 +24,14 @@ const (
 // Result is one item of "results" in report.json v2.
 // The field order here is the order they come out in the JSON.
 type Result struct {
-	Domain        string     `json:"domain"`
-	Host          string     `json:"host"`
-	Port          int        `json:"port"`
+	Domain string `json:"domain"`
+	Host   string `json:"host"`
+	Port   int    `json:"port"`
+	// StartTLS names the plaintext protocol that was upgraded before the
+	// handshake. Absent means implicit TLS. It is reported because the port
+	// alone does not say it: "mail.example.com:587" gets the negotiation
+	// inferred, and an operator reading the report should see which one.
+	StartTLS      StartTLS   `json:"starttls,omitempty"`
 	Status        Status     `json:"status"`
 	Valid         bool       `json:"valid"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
@@ -86,27 +92,36 @@ func (o Options) normalized() Options {
 // Check verifies one target ("domain", "domain:port" or a URL) and always
 // returns a Result — failures become status/error_kind, never a bare error.
 func Check(ctx context.Context, target string, opts Options) Result {
+	parsed, err := ParseTarget(target)
+	if err != nil {
+		return Result{
+			Domain:    target,
+			CheckedAt: opts.normalized().Now().UTC(),
+			Status:    StatusError,
+			ErrorKind: KindOther,
+			Error:     err.Error(),
+		}
+	}
+	return CheckTarget(ctx, parsed, opts)
+}
+
+// CheckTarget is Check on an already parsed target. Callers that keep a
+// []Target should use it: Target.String() is lossy on purpose (it drops the
+// STARTTLS negotiation, which is not part of the report contract), so a
+// round-trip through the string form would silently check the wrong thing.
+func CheckTarget(ctx context.Context, target Target, opts Options) Result {
 	opts = opts.normalized()
 	start := time.Now()
 
 	res := Result{
-		Domain:    target,
+		Domain:    target.String(),
+		Host:      target.Host,
+		Port:      target.Port,
+		StartTLS:  target.StartTLS,
 		CheckedAt: opts.Now().UTC(),
 	}
 
-	parsed, err := ParseTarget(target)
-	if err != nil {
-		res.Status = StatusError
-		res.ErrorKind = KindOther
-		res.Error = err.Error()
-		res.DurationMS = time.Since(start).Milliseconds()
-		return res
-	}
-	res.Domain = parsed.String()
-	res.Host = parsed.Host
-	res.Port = parsed.Port
-
-	state, failed, attempts := handshake(ctx, parsed, opts)
+	state, failed, attempts := handshake(ctx, target, opts)
 	res.Attempts = attempts
 
 	if failed == nil {
@@ -129,7 +144,7 @@ func Check(ctx context.Context, target string, opts Options) Result {
 	// InsecureSkipVerify only to extract diagnostic metadata. The status stays
 	// expired/invalid — the reconnection never validates the domain.
 	if failed.class.certErr {
-		if state, err := insecureHandshake(ctx, parsed, opts); err == nil {
+		if state, err := insecureHandshake(ctx, target, opts); err == nil {
 			res.applyMetadata(state, opts)
 			res.refineCertStatus(state, opts)
 			// Flag the provenance: this metadata was NOT verified.
@@ -192,24 +207,38 @@ func dial(ctx context.Context, target Target, timeout time.Duration, insecure bo
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	d := &tls.Dialer{
-		Config: &tls.Config{
-			ServerName:         target.Host,
-			InsecureSkipVerify: insecure, //nolint:gosec // diagnostic path only
-			// Monitoring has to see old servers; certificate validation is
-			// unchanged, this only widens the handshakes we accept.
-			MinVersion: tls.VersionTLS10,
-		},
-	}
-	conn, err := d.DialContext(ctx, "tcp", target.String())
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "tcp", target.String())
 	if err != nil {
 		return tls.ConnectionState{}, err
 	}
 	defer conn.Close()
 
-	tlsConn, ok := conn.(*tls.Conn)
-	if !ok {
-		return tls.ConnectionState{}, fmt.Errorf("unexpected connection of type %T", conn)
+	// The same deadline covers the plaintext dialogue. Without it a server that
+	// accepts the connection and then says nothing would hang this check for as
+	// long as the kernel allows, because the STARTTLS exchange happens outside
+	// any context-aware API.
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := conn.SetDeadline(deadline); err != nil {
+			return tls.ConnectionState{}, err
+		}
+	}
+
+	if target.StartTLS != StartTLSNone {
+		if err := startTLS(conn, target.StartTLS); err != nil {
+			return tls.ConnectionState{}, err
+		}
+	}
+
+	tlsConn := tls.Client(conn, &tls.Config{
+		ServerName:         target.Host,
+		InsecureSkipVerify: insecure, //nolint:gosec // diagnostic path only
+		// Monitoring has to see old servers; certificate validation is
+		// unchanged, this only widens the handshakes we accept.
+		MinVersion: tls.VersionTLS10,
+	})
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		return tls.ConnectionState{}, err
 	}
 	return tlsConn.ConnectionState(), nil
 }

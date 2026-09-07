@@ -60,8 +60,8 @@ func TestTargetString(t *testing.T) {
 		target Target
 		want   string
 	}{
-		{Target{"example.com", 443}, "example.com:443"},
-		{Target{"::1", 8443}, "[::1]:8443"},
+		{Target{Host: "example.com", Port: 443}, "example.com:443"},
+		{Target{Host: "::1", Port: 8443}, "[::1]:8443"},
 	}
 	for _, c := range cases {
 		if got := c.target.String(); got != c.want {

@@ -15,32 +15,76 @@ import (
 // DefaultPort is used when the target does not name one explicitly.
 const DefaultPort = 443
 
-// portsByScheme maps common URL schemes to the matching TLS port. "http" maps
-// to 443 on purpose: whoever pastes an http:// URL into the list almost always
-// wants the certificate of that host, not port 80 in the clear.
-var portsByScheme = map[string]int{
-	"http":  443,
-	"https": 443,
-	"ftps":  990,
-	"imaps": 993,
-	"ldaps": 636,
-	"pop3s": 995,
-	"smtps": 465,
+// scheme describes what a URL scheme in the domain list implies: which port to
+// use when none is given, and whether the certificate is behind a STARTTLS
+// negotiation.
+type scheme struct {
+	port     int
+	startTLS StartTLS
+}
+
+// schemes is the explicit half of the notation. "http" maps to 443 on purpose:
+// whoever pastes an http:// URL into the list almost always wants the
+// certificate of that host, not port 80 in the clear. "tls" is the escape
+// hatch — it forces a direct handshake on any port, overriding the inference
+// below.
+var schemes = map[string]scheme{
+	"http":       {443, StartTLSNone},
+	"https":      {443, StartTLSNone},
+	"tls":        {443, StartTLSNone},
+	"ftps":       {990, StartTLSNone},
+	"imaps":      {993, StartTLSNone},
+	"ldaps":      {636, StartTLSNone},
+	"pop3s":      {995, StartTLSNone},
+	"smtps":      {465, StartTLSNone},
+	"smtp":       {587, StartTLSSMTP},
+	"submission": {587, StartTLSSMTP},
+	"imap":       {143, StartTLSIMAP},
+	"pop3":       {110, StartTLSPOP3},
+	"ldap":       {389, StartTLSLDAP},
+	"postgres":   {5432, StartTLSPostgres},
+	"postgresql": {5432, StartTLSPostgres},
+}
+
+// startTLSByPort is the implicit half: what "mail.example.com:587" means when
+// nobody wrote a scheme. Every port here is a cleartext port whose TLS variant
+// lives somewhere else (587 upgrades, 465 is implicit; 143 upgrades, 993 is
+// implicit), so the inference cannot shadow a service that would have answered
+// a direct handshake. When it guesses wrong anyway, "tls://host:port" says so.
+var startTLSByPort = map[int]StartTLS{
+	25:   StartTLSSMTP,
+	587:  StartTLSSMTP,
+	2525: StartTLSSMTP,
+	143:  StartTLSIMAP,
+	110:  StartTLSPOP3,
+	389:  StartTLSLDAP,
+	5432: StartTLSPostgres,
 }
 
 // Target is a normalized check target.
 type Target struct {
-	Host string
-	Port int
+	Host     string
+	Port     int
+	StartTLS StartTLS
 }
 
-// String returns the canonical "host:port" form (with brackets for IPv6).
+// String returns the canonical "host:port" form (with brackets for IPv6). It
+// deliberately drops the negotiation: this is what lands in the "domain" field
+// of the report, and that field is part of the v2 contract.
 func (t Target) String() string {
 	return net.JoinHostPort(t.Host, strconv.Itoa(t.Port))
 }
 
-// ParseTarget accepts "domain", "domain:port" and URLs ("https://domain/path"),
-// returning a normalized host and port.
+// key identifies a target for de-duplication. Unlike String it keeps the
+// negotiation, so "smtp://mail:587" and "tls://mail:587" stay two entries —
+// they ask the server two different questions.
+func (t Target) key() string {
+	return string(t.StartTLS) + "|" + t.String()
+}
+
+// ParseTarget accepts "domain", "domain:port" and URLs ("https://domain/path",
+// "smtp://mail.example.com"), returning a normalized host, port and STARTTLS
+// negotiation.
 func ParseTarget(raw string) (Target, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -52,16 +96,23 @@ func ParseTarget(raw string) (Target, error) {
 		if err != nil {
 			return Target{}, fmt.Errorf("invalid URL %q: %w", raw, err)
 		}
+		known, ok := schemes[strings.ToLower(u.Scheme)]
 		port := DefaultPort
+		if ok {
+			port = known.port
+		}
 		if p := u.Port(); p != "" {
 			port, err = parsePort(p)
 			if err != nil {
 				return Target{}, fmt.Errorf("target %q: %w", raw, err)
 			}
-		} else if fromScheme, ok := portsByScheme[strings.ToLower(u.Scheme)]; ok {
-			port = fromScheme
 		}
-		return newTarget(u.Hostname(), port, raw)
+		if ok {
+			// An explicit scheme is an instruction, not a hint: it wins over
+			// whatever the port would have suggested.
+			return newTarget(u.Hostname(), port, known.startTLS, raw)
+		}
+		return newTarget(u.Hostname(), port, startTLSByPort[port], raw)
 	}
 
 	// "host:port" (including "[::1]:443").
@@ -70,11 +121,11 @@ func ParseTarget(raw string) (Target, error) {
 		if err != nil {
 			return Target{}, fmt.Errorf("target %q: %w", raw, err)
 		}
-		return newTarget(host, p, raw)
+		return newTarget(host, p, startTLSByPort[p], raw)
 	}
 
 	// What is left is a bare host or an IPv6 without a port ("::1", "[::1]").
-	return newTarget(strings.Trim(s, "[]"), DefaultPort, raw)
+	return newTarget(strings.Trim(s, "[]"), DefaultPort, startTLSByPort[DefaultPort], raw)
 }
 
 func parsePort(s string) (int, error) {
@@ -85,7 +136,7 @@ func parsePort(s string) (int, error) {
 	return p, nil
 }
 
-func newTarget(host string, port int, raw string) (Target, error) {
+func newTarget(host string, port int, proto StartTLS, raw string) (Target, error) {
 	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
 	if host == "" {
 		return Target{}, fmt.Errorf("target %q: empty host", raw)
@@ -93,7 +144,7 @@ func newTarget(host string, port int, raw string) (Target, error) {
 	if strings.ContainsAny(host, " \t/\\@#?") {
 		return Target{}, fmt.Errorf("target %q: invalid host %q", raw, host)
 	}
-	return Target{Host: host, Port: port}, nil
+	return Target{Host: host, Port: port, StartTLS: proto}, nil
 }
 
 // ParseTargetList reads the domain list: one entry per line, "#" starts a
@@ -130,7 +181,7 @@ func ParseTargetList(r io.Reader) ([]Target, error) {
 			problems = append(problems, fmt.Errorf("line %d: %w", lineNo, err))
 			continue
 		}
-		key := target.String()
+		key := target.key()
 		if seen[key] {
 			continue
 		}

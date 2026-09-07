@@ -802,6 +802,8 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
         deadline_days: {one: '{n} day', other: '{n} days'},
         deadline_scale: '{text} (on a {days}-day scale)',
 
+        det_starttls: 'STARTTLS',
+
         det_domain: 'Checked domain',
         det_issuer: 'Issuer',
         det_subject: 'Subject',
@@ -946,6 +948,8 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
         deadline_today: 'expira hoje',
         deadline_days: {one: '{n} dia', other: '{n} dias'},
         deadline_scale: '{text} (escala de {days} dias)',
+
+        det_starttls: 'STARTTLS',
 
         det_domain: 'Domínio verificado',
         det_issuer: 'Emissor',
@@ -1387,6 +1391,7 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
       valid: raw.valid === true,
       days: days,
       expiresAt: expiresAt,
+      startTLS: isText(raw.starttls) ? raw.starttls : '',
       issuedAt: validDate(raw.issued_at),
       checkedAt: validDate(raw.checked_at),
       subject: isText(raw.subject) ? raw.subject : '',
@@ -1730,6 +1735,7 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
     pair(t('det_serial'), it.serial, { cls: 'mono' });
     pair(t('det_tls'), it.tls);
     pair(t('det_cipher'), it.cipher, { cls: 'mono' });
+    pair(t('det_starttls'), it.startTLS);
     if (it.issuedAt) pair(t('det_issued_at'), formatDateTime(it.issuedAt));
     if (it.expiresAt) pair(t('det_expires_at'), formatDateTime(it.expiresAt));
     if (it.checkedAt) pair(t('det_checked_at'), formatDateTime(it.checkedAt));
@@ -1998,6 +2004,7 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
     ['host', function (it) { return it.host; }],
     ['port', function (it) { return it.port === null ? '' : it.port; }],
     ['status', function (it) { return it.status; }],
+    ['starttls', function (it) { return it.startTLS; }],
     ['days_remaining', function (it) { return isNumber(it.days) ? it.days : ''; }],
     ['expires_at', function (it) { return it.expiresAt ? it.expiresAt.toISOString() : ''; }],
     ['issued_at', function (it) { return it.issuedAt ? it.issuedAt.toISOString() : ''; }],

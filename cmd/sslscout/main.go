@@ -337,7 +337,7 @@ func checkAll(ctx context.Context, cfg config.Config, targets []checker.Target) 
 		go func(i int, target checker.Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = checker.Check(ctx, target.String(), opts)
+			results[i] = checker.CheckTarget(ctx, target, opts)
 		}(i, target)
 	}
 	wg.Wait()
