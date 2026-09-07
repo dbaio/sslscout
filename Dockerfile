@@ -35,9 +35,13 @@ WORKDIR /app
 COPY --from=builder /out/sslscout /usr/local/bin/sslscout
 COPY public/index.html /app/public/index.html
 
-# The report is written at run time; the directory has to be writable by the
-# non-root user.
-RUN chown -R sslscout:sslscout /app/public
+# The report and the alert history are written at run time; both directories
+# have to be writable by the non-root user. They are kept apart because only
+# public/ is ever served: state.json lists the domains that currently have a
+# problem, and nginx must never be able to hand that out.
+RUN mkdir -p /app/state \
+    && chown -R sslscout:sslscout /app/public /app/state \
+    && chmod 700 /app/state
 
 USER sslscout
 

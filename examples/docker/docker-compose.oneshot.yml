@@ -31,6 +31,7 @@ services:
       - -domains=/app/domains.txt
       - -config=/app/config.json
       - -out=/app/public/report.json
+      - -state=/app/state/state.json
       - -quiet
     environment:
       TZ: ${TZ:-UTC}
@@ -44,6 +45,9 @@ services:
       - ../../domains.txt:/app/domains.txt:ro
       - ../../config.json:/app/config.json:ro
       - public:/app/public
+      # Survives between runs, which is the whole point: the container is
+      # recreated on every cron tick.
+      - state:/app/state
     security_opt:
       - no-new-privileges:true
     read_only: true
@@ -64,3 +68,4 @@ services:
 
 volumes:
   public:
+  state:

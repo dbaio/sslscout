@@ -30,6 +30,7 @@ also come with Brazilian Portuguese — see [Languages](#languages-i18n).
 - [Docker](#docker)
 - [Scheduling](#scheduling)
 - [Notifications](#notifications)
+- [Alert repetition](#alert-repetition)
 - [Security](#security)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -170,6 +171,8 @@ sslscout [flags]
 | `-lang` | string | `en` | Language of the notifications: `en` or `pt-BR`. Overrides `language`. |
 | `-dashboard-url` | string | (empty) | Public URL where the report is published. When set, every alert ends with a link to it. Overrides `dashboard_url`. |
 | `-notify` | bool | `true` | Sends notifications. Use `-notify=false` to turn them off. |
+| `-state` | string | `state.json` | File remembering what was already alerted, so a repeated run stays quiet. Empty disables the de-duplication. |
+| `-repeat` | duration | `24h` | Re-sends an unchanged alert only after this long. `0` never repeats it. |
 | `-serve` | string | (empty) | After checking, serves the report directory on this address (e.g. `:8080`). |
 | `-interval` | duration | `0` | Re-runs the check on this interval. `0` runs once. |
 | `-fail-on` | string | `none` | Exits non-zero if any result is at this level or worse: `none`, `warning`, `critical`, `invalid`, `error`. |
@@ -184,6 +187,10 @@ Notes that matter:
 - `-notify` is a boolean flag defaulting to `true`. Writing just `-notify` does
   not turn it off; to turn it off you need `-notify=false` (the standard Go
   boolean flag syntax).
+- `-state` is what keeps an hourly cron from sending the same warning every
+  hour — see [Alert repetition](#alert-repetition). It must **not** point
+  inside the directory `-serve` publishes: it lists the domains that currently
+  have a problem.
 - `-serve` serves the **directory containing** the `-out` file. With the
   defaults that is `public/`, i.e. `index.html` and `report.json` together.
   `report.json` is served with `Cache-Control: no-store` so the browser does
@@ -258,6 +265,8 @@ which are secrets.
 | `timeout_seconds` | int | `10` | Per-connection timeout, in seconds. Equivalent to `-timeout`. |
 | `concurrency` | int | `20` | Simultaneous checks. Equivalent to `-concurrency`. |
 | `retries` | int | `3` | Attempts per domain on transient failures. Equivalent to `-retries`. |
+| `state_file` | string | `"state.json"` | Where the alert history is kept. Empty disables the de-duplication. Equivalent to `-state`. |
+| `repeat_hours` | int | `24` | How long an unchanged problem stays quiet. `0` never repeats it. Equivalent to `-repeat`. |
 | `language` | string | `"en"` | Language of the notifications: `en` or `pt-BR`. Equivalent to `-lang`. |
 | `dashboard_url` | string | `""` | Public URL where the report is published. When set, alerts end with a link to it. Empty omits the line. Equivalent to `-dashboard-url`. |
 | `slack_webhook_url` | string | `""` | Slack incoming webhook. Empty disables the channel. |
@@ -1193,6 +1202,81 @@ If the relay supports STARTTLS on 25 or 587, prefer `"tls": "starttls"` —
 
 ---
 
+## Alert repetition
+
+A checker with no memory has one failure mode that outweighs any missing
+feature. Put it on an hourly cron with `alert_threshold_days` at 15, and a
+single certificate about to expire produces around **360 identical messages**
+before anybody renews it. Nobody responds to that by renewing faster. They mute
+the channel — and then they miss the next outage, which is the one the tool
+existed for.
+
+So SSLScout keeps a small state file (`state.json` by default, `-state` to move
+it, empty to switch the whole thing off) recording what it has already said.
+The rules are few, and every one of them can only suppress a *repeat* of
+something already sent:
+
+| Situation | Alerts? |
+| --- | --- |
+| A domain nobody has heard about yet | Yes |
+| The status changed (`warning` to `critical`, `invalid` to `error`) | Yes |
+| The certificate was replaced — the expiry date moved | Yes |
+| The countdown crossed a rung: 30, 14, 7, 3, 1 days | Yes |
+| Same problem, same rung, less than `-repeat` ago (24h) | **No** |
+| The certificate is fine again | No, and the entry is forgotten |
+
+That last line matters as much as the rest: once a domain recovers it is
+dropped from the file, so the *next* problem on it alerts immediately instead
+of landing inside the quiet window of the previous one.
+
+A second run says so instead of staying mysteriously silent:
+
+```
+Summary: total=42 ok=40 warning=1 critical=1 expired=0 invalid=0 error=0 (1.9s)
+Report written to public/report.json
+Nothing new to notify: 2 problem(s) already announced.
+```
+
+Note that this only filters **notifications**. `report.json` is always rewritten
+in full, and the dashboard always shows every domain — the state file changes
+who gets woken up, never what is true.
+
+### When it fails, it fails loud
+
+Every failure mode was chosen so that the worst case is a duplicate alert, not
+a missing one:
+
+- **The state file cannot be read, or is corrupt** — the run reports it and
+  starts from an empty history. Everything is announced again. Noisy, never
+  silent.
+- **The delivery failed** — nothing is recorded, so the next run tries again.
+  If you have three channels and only one of them was down, that costs a
+  duplicate on the other two. Worth it.
+- **The state file cannot be written** — the run reports it and carries on. The
+  alerts went out; the next run will repeat them.
+- **The check was interrupted** (Ctrl-C or SIGTERM mid-run) — the state is left
+  untouched, so a partial list can never make SSLScout forget a domain it
+  simply did not reach.
+
+### Tuning it
+
+```sh
+# Announce a change, then stay quiet until something moves. No heartbeat.
+./sslscout -repeat 0
+
+# A reminder every 6 hours while a problem is open.
+./sslscout -repeat 6h
+
+# The old behaviour: every run alerts about everything.
+./sslscout -state ""
+```
+
+`-repeat 0` suits a busy channel and an attentive team; `-repeat 6h` suits a
+rota that changes shift. The rungs of the ladder still get through in both
+cases, which is what keeps "7 days left" from being buried.
+
+---
+
 ## Security
 
 - **Never commit `config.json`.** It holds the SMTP password and the webhook
@@ -1219,9 +1303,14 @@ If the relay supports STARTTLS on 25 or 587, prefer `"tls": "starttls"` —
   it to the internet. If you need remote access, put it behind a reverse proxy
   with TLS and authentication (the nginx and Apache examples show how), or
   publish it with `-p 127.0.0.1:8080:8080` and reach it through an SSH tunnel.
-- **The domain list is sensitive information.** `domains.txt` and the generated
-  `report.json` describe your network surface — internal hosts included. Think
-  twice before publishing the dashboard in a public repository or site.
+- **The domain list is sensitive information.** `domains.txt`, the generated
+  `report.json` and the `state.json` history describe your network surface —
+  internal hosts included. Think twice before publishing the dashboard in a
+  public repository or site.
+- **Keep `state.json` out of the served directory.** It is written with `600`
+  permissions because it lists the domains that currently have a problem, which
+  is a shortlist of where to attack. The default puts it in the working
+  directory, not in `public/`; if you move it with `-state`, keep it that way.
 - **If a secret leaks**, revoke it at the source (regenerate the webhook in
   Slack/Teams, revoke the app password with Google). Removing the file from
   disk does not invalidate the credential.
@@ -1302,6 +1391,7 @@ directory, create the file, and bring it up again:
 ├── pkg/config/          # loading config.json and the environment variables
 ├── pkg/report/          # building and writing report.json
 ├── pkg/notifier/        # Slack, Microsoft Teams, SMTP
+├── pkg/state/           # alert history: what was announced, and when
 ├── pkg/i18n/            # message catalogs for the notifications
 ├── public/
 │   ├── index.html       # single-file static dashboard (with its own catalogs)

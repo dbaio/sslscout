@@ -21,7 +21,7 @@ Type=oneshot
 User=sslscout
 Group=sslscout
 WorkingDirectory=/opt/sslscout
-ExecStart=/opt/sslscout/sslscout -quiet
+ExecStart=/opt/sslscout/sslscout -quiet -state=%S/sslscout/state.json
 
 # Secrets outside config.json: create /etc/sslscout/secrets.env with mode 0600
 # and lines such as SSLSCOUT_SMTP_PASSWORD=... (see the README "Security"
@@ -51,6 +51,12 @@ SystemCallErrorNumber=EPERM
 # ProtectSystem=strict makes everything read-only; the report needs write
 # permission in this directory.
 ReadWritePaths=/opt/sslscout/public
+
+# The alert history, so an hourly timer does not re-send the same warning every
+# hour. systemd creates and owns /var/lib/sslscout, which keeps it out of both
+# the working directory and the directory nginx serves.
+StateDirectory=sslscout
+StateDirectoryMode=0700
 
 [Install]
 WantedBy=multi-user.target

@@ -22,9 +22,12 @@ MAILTO=sre@example.com
 # errors still go to stderr and from there to MAILTO.
 30 6 * * *   sslscout   cd /opt/sslscout && ./sslscout -quiet
 
-# A more aggressive variant: hourly, with no notifications (it only refreshes
-# the dashboard), leaving the alerts to the daily run above.
-# 5 * * * *    sslscout   cd /opt/sslscout && ./sslscout -quiet -notify=false
+# A more aggressive variant: hourly, keeping the dashboard fresh. The
+# notifications stay on because state.json (written in this same directory)
+# holds back anything already announced — see "Alert repetition" in the README.
+# Drop -notify=false only if you understand that; add -state "" and you are
+# back to 24 messages a day per broken certificate.
+# 5 * * * *    sslscout   cd /opt/sslscout && ./sslscout -quiet
 
 # A variant for a pipeline/monitoring job: exits non-zero if any certificate is
 # critical or worse, which makes cron send the mail.

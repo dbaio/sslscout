@@ -45,6 +45,11 @@ domains.prod.txt
 # "Why report.json is not versioned".
 public/report.json
 
+# state.json is the alert history: which domains have a problem right now, and
+# when each was last announced. Same sensitivity as the domain list above.
+state.json
+*.state.json
+
 # ---------------------------------------------------------------------------
 # Operating system and editors
 # ---------------------------------------------------------------------------

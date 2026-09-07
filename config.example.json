@@ -4,6 +4,8 @@
   "timeout_seconds": 10,
   "concurrency": 20,
   "retries": 3,
+  "state_file": "state.json",
+  "repeat_hours": 24,
   "language": "en",
   "dashboard_url": "",
   "slack_webhook_url": "",

@@ -26,6 +26,7 @@ import (
 	"github.com/dbaio/sslscout/pkg/i18n"
 	"github.com/dbaio/sslscout/pkg/notifier"
 	"github.com/dbaio/sslscout/pkg/report"
+	"github.com/dbaio/sslscout/pkg/state"
 )
 
 // version is overwritten at build time: -ldflags "-X main.version=v1.2.3".
@@ -54,6 +55,8 @@ type options struct {
 	lang         string
 	dashboardURL string
 	notify       bool
+	state        string
+	repeat       time.Duration
 	serve        string
 	interval     time.Duration
 	failOn       string
@@ -80,6 +83,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.dashboardURL, "dashboard-url", defaults.DashboardURL,
 		"public URL where the report is published; alerts link to it (e.g. \"https://sslscout.example.com\")")
 	fs.BoolVar(&o.notify, "notify", true, "send notifications (use -notify=false to turn them off)")
+	fs.StringVar(&o.state, "state", defaults.StateFile,
+		"file remembering what was already alerted, so a repeated run stays quiet (empty disables it)")
+	fs.DurationVar(&o.repeat, "repeat", time.Duration(defaults.RepeatHours)*time.Hour,
+		"re-send an unchanged alert only after this long (0 = never repeat)")
 	fs.StringVar(&o.serve, "serve", "", "after checking, serve the report directory on this address (e.g. \":8080\")")
 	fs.DurationVar(&o.interval, "interval", 0, "re-run the check on this interval (0 = run once)")
 	fs.StringVar(&o.failOn, "fail-on", "none", "exit non-zero if any result is at this level or worse: none|warning|critical|invalid|error")
@@ -264,6 +271,12 @@ func applyFlags(cfg *config.Config, o options, set map[string]bool) {
 	if set["dashboard-url"] {
 		cfg.DashboardURL = o.dashboardURL
 	}
+	if set["state"] {
+		cfg.StateFile = o.state
+	}
+	if set["repeat"] {
+		cfg.RepeatOverride = o.repeat
+	}
 }
 
 // checkOnce runs one full cycle: check, report and notifications.
@@ -300,12 +313,63 @@ func checkOnce(ctx context.Context, cfg config.Config, targets []checker.Target,
 	printf("Report written to %s", o.out)
 
 	if o.notify {
-		if err := notifier.Notify(cfg, rep.Results); err != nil {
-			// A notification failure does not invalidate the check: report and move on.
-			fmt.Fprintf(stderr, "sslscout: could not notify:\n%v\n", err)
-		}
+		notify(cfg, rep.Results, time.Now(), printf, stderr)
 	}
 	return rep, nil
+}
+
+// notify applies the alert history and sends what is left of the results.
+//
+// The history is only committed once the delivery succeeded. A webhook that was
+// down must not cost the operator the alert: leaving the state untouched means
+// the next run tries again, at the price of a duplicate if only one of several
+// channels failed. That trade is deliberate — see pkg/state.
+func notify(cfg config.Config, results []checker.Result, now time.Time,
+	printf func(string, ...any), stderr io.Writer) {
+
+	path := cfg.State()
+	if path == "" {
+		if err := notifier.Notify(cfg, results); err != nil {
+			fmt.Fprintf(stderr, "sslscout: could not notify:\n%v\n", err)
+		}
+		return
+	}
+
+	st, err := state.Load(path)
+	if err != nil {
+		// Fail open: with no history every problem is announced again, which is
+		// noisy but never silent.
+		fmt.Fprintf(stderr, "sslscout: %v\n", err)
+	}
+
+	pending := st.Pending(results, now, cfg.RepeatAfter())
+	switch problems := countProblems(results); {
+	case len(pending) > 0:
+		if err := notifier.Notify(cfg, pending); err != nil {
+			fmt.Fprintf(stderr, "sslscout: could not notify:\n%v\n", err)
+			pending = nil // not recorded on purpose: the next run retries
+		} else {
+			printf("Notified %d new or changed problem(s).", len(pending))
+		}
+	case problems > 0:
+		printf("Nothing new to notify: %d problem(s) already announced.", problems)
+	}
+
+	st.Record(pending, now)
+	st.Sync(results, now)
+	if err := st.Save(path); err != nil {
+		fmt.Fprintf(stderr, "sslscout: %v\n", err)
+	}
+}
+
+func countProblems(results []checker.Result) int {
+	n := 0
+	for _, r := range results {
+		if r.Status != checker.StatusOK {
+			n++
+		}
+	}
+	return n
 }
 
 // checkAll fires the checks while respecting the concurrency limit. The

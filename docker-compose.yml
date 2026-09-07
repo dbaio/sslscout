@@ -40,6 +40,9 @@ services:
       - -domains=/app/domains.txt
       - -config=/app/config.json
       - -out=/app/public/report.json
+      # read_only: true makes /app read-only, so the alert history needs a
+      # volume of its own. Without it every run would re-send every alert.
+      - -state=/app/state/state.json
       - -interval=${SSLSCOUT_INTERVAL:-12h}
     environment:
       # Timestamps in the container log follow this zone. The report itself is
@@ -60,6 +63,8 @@ services:
       - ./domains.txt:/app/domains.txt:ro
       - ./config.json:/app/config.json:ro
       - public:/app/public
+      # Deliberately not shared with the web container.
+      - state:/app/state
     # The check is outbound-only; it never accepts a connection.
     security_opt:
       - no-new-privileges:true
@@ -88,3 +93,4 @@ services:
 
 volumes:
   public:
+  state:

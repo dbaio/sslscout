@@ -75,7 +75,7 @@ lint:
 	$(GO) vet ./...
 
 clean:
-	rm -f $(BINARY) coverage.out coverage.html $(REPORT)
+	rm -f $(BINARY) coverage.out coverage.html $(REPORT) state.json
 
 docker:
 	@v="$(VERSION)"; \

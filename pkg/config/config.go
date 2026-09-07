@@ -58,10 +58,25 @@ type Config struct {
 	TeamsWebhookURL string `json:"teams_webhook_url"`
 	SMTP            SMTP   `json:"smtp"`
 
+	// StateFile is where the alert history lives, so an hourly cron does not
+	// re-send the same warning every hour. Empty disables the de-duplication
+	// and every run alerts about everything, which is the old behaviour.
+	//
+	// It must not sit inside the directory served by -serve: it lists the
+	// domains that currently have a problem.
+	StateFile string `json:"state_file"`
+	// RepeatHours is how long an unchanged problem stays quiet. Zero means it
+	// is never repeated: only a change of status, a replaced certificate or a
+	// crossed step gets through.
+	RepeatHours int `json:"repeat_hours"`
+
 	// TimeoutOverride holds the value of the -timeout flag, which accepts
 	// sub-second durations ("500ms") — precision timeout_seconds cannot express.
 	// When > 0 it wins over the file field.
 	TimeoutOverride time.Duration `json:"-"`
+	// RepeatOverride holds the value of the -repeat flag, for the same reason.
+	// Negative means "not given"; zero is a valid setting on its own.
+	RepeatOverride time.Duration `json:"-"`
 }
 
 // Default returns the built-in configuration.
@@ -73,7 +88,10 @@ func Default() Config {
 		Concurrency:           20,
 		Retries:               3,
 		Language:              string(i18n.Default),
+		StateFile:             "state.json",
+		RepeatHours:           24,
 		SMTP:                  SMTP{Port: 587, TLS: TLSStartTLS},
+		RepeatOverride:        -1,
 	}
 }
 
@@ -83,6 +101,19 @@ func (c Config) Timeout() time.Duration {
 		return c.TimeoutOverride
 	}
 	return time.Duration(c.TimeoutSeconds) * time.Second
+}
+
+// State returns the path of the alert history file, trimmed. Empty means the
+// de-duplication is off.
+func (c Config) State() string { return strings.TrimSpace(c.StateFile) }
+
+// RepeatAfter returns how long an unchanged problem stays quiet. Zero means it
+// is never repeated.
+func (c Config) RepeatAfter() time.Duration {
+	if c.RepeatOverride >= 0 {
+		return c.RepeatOverride
+	}
+	return time.Duration(c.RepeatHours) * time.Hour
 }
 
 // Dashboard returns the configured dashboard URL, trimmed. Empty means no
@@ -172,6 +203,9 @@ func (c Config) Validate() error {
 	}
 	if c.Retries < 1 {
 		problems = append(problems, fmt.Errorf("retries must be >= 1 (%d)", c.Retries))
+	}
+	if c.RepeatAfter() < 0 {
+		problems = append(problems, fmt.Errorf("repeat interval cannot be negative (%s)", c.RepeatAfter()))
 	}
 	if _, ok := i18n.Parse(c.Language); !ok {
 		problems = append(problems, fmt.Errorf("unsupported language %q (use one of: %s)",
