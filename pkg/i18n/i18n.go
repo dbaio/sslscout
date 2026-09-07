@@ -161,6 +161,16 @@ func (p Printer) LineExpiring(domain string, days int, date string) string {
 	return fmt.Sprintf(p.c.lineExpiring, domain, p.Days(days), date)
 }
 
+// LineExpiringChain describes a certificate whose own deadline is fine but
+// whose chain runs out first. It names the intermediate on purpose: whoever
+// reads the alert has to know that renewing the leaf will not help.
+func (p Printer) LineExpiringChain(domain string, days int, date, subject string) string {
+	if subject == "" {
+		return fmt.Sprintf(p.c.lineExpiringChainNoName, domain, p.Days(days), date)
+	}
+	return fmt.Sprintf(p.c.lineExpiringChain, domain, p.Days(days), date, subject)
+}
+
 // plural carries the two forms English and Portuguese need. A language with a
 // richer plural system would need a function here instead of two strings.
 type plural struct{ one, other string }
@@ -186,6 +196,10 @@ type catalog struct {
 	lineInvalidSubject string // domain, kind, subject
 	lineExpiring       string // domain, days, date
 	lineExpiringNoDate string // domain, days
+	// The chain lines take domain, days, date and (except for the NoName
+	// variant) the subject of the intermediate that expires first.
+	lineExpiringChain       string
+	lineExpiringChainNoName string
 }
 
 var catalogs = map[Lang]catalog{
@@ -223,6 +237,9 @@ var catalogs = map[Lang]catalog{
 		lineInvalidSubject: "%s — invalid (%s, certificate for %q)",
 		lineExpiring:       "%s — expires in %s, on %s",
 		lineExpiringNoDate: "%s — expires in %s",
+
+		lineExpiringChain:       "%s — its certificate chain expires in %s, on %s (intermediate %q)",
+		lineExpiringChainNoName: "%s — its certificate chain expires in %s, on %s",
 	},
 	PtBR: {
 		subject: plural{
@@ -258,5 +275,8 @@ var catalogs = map[Lang]catalog{
 		lineInvalidSubject: "%s — inválido (%s, certificado de %q)",
 		lineExpiring:       "%s — vence em %s, em %s",
 		lineExpiringNoDate: "%s — vence em %s",
+
+		lineExpiringChain:       "%s — a cadeia de certificados vence em %s, em %s (intermediária %q)",
+		lineExpiringChainNoName: "%s — a cadeia de certificados vence em %s, em %s",
 	},
 }

@@ -649,9 +649,50 @@ and there was no certificate to read):
 | `dns_names` | array of string | DNS SANs of the certificate. |
 | `tls_version` | string | Negotiated version, e.g. `TLS 1.3`. |
 | `cipher_suite` | string | Negotiated cipher. |
+| `chain_expires_at` | string (RFC 3339) | `NotAfter` of the intermediate that expires first — present **only** when that date falls before the leaf's. |
+| `chain_days_remaining` | int | Days until that date. It is this number, not `days_remaining`, that the thresholds compared. |
+| `chain_subject` | string | Which certificate in the chain it is. |
 | `metadata_insecure` | bool | `true` when the certificate fields above came from the diagnostic handshake, **without verification** (see below). Absent when the connection was verified successfully. |
 | `error` | string | Readable error message. |
 | `error_kind` | string | Error classification (table below). |
+
+### Why the chain fields exist
+
+`days_remaining` always describes the leaf — the certificate issued for the
+name you asked about. But the leaf is not the only thing that can run out: the
+intermediate that signed it expires too, and when it does the site goes down
+exactly as if the leaf had. That is what happened to half the web when AddTrust
+expired in 2020 and DST Root X3 in 2021: every leaf involved had months left,
+and every one of them stopped working.
+
+So the three `chain_*` fields appear together, and only in the case worth
+reporting — an intermediate the server sent that expires *before* the leaf:
+
+```json
+{
+  "domain": "example.com:443",
+  "status": "critical",
+  "days_remaining": 200,
+  "chain_expires_at": "2026-09-10T12:00:00Z",
+  "chain_days_remaining": 4,
+  "chain_subject": "Example Intermediate CA"
+}
+```
+
+`days_remaining` still says 200, because that is the truth about the leaf. The
+`status` is `critical`, because the thresholds run against the deadline that
+actually matters. The alert names the intermediate, so nobody wastes an
+afternoon renewing a certificate that was never the problem.
+
+A self-signed root in the chain is ignored on purpose. Servers pad the chain
+with it out of habit, but trust comes from the local store, and the copy that
+counts is the one there — with its own dates.
+
+The dashboard follows the same rule: the countdown on the card shows the
+deadline that decided the status, with a "chain, not the certificate" note
+under it, and the detail panel carries both dates. Sorting uses it too, so a
+host whose chain dies in two days sits above one whose own certificate dies in
+ten.
 
 ### `status` values
 

@@ -348,6 +348,7 @@ tr.open .chevron { transform: rotate(180deg); color: var(--accent); }
 .track { height: 5px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .track i { display: block; height: 100%; border-radius: 3px; background: var(--st-color); min-width: 2px; }
 .deadline-none { color: var(--text-3); }
+.deadline-note { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .cell-date { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 .cell-issuer { font-size: 13px; color: var(--text-2); max-width: 230px; }
@@ -801,8 +802,11 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
         deadline_today: 'expires today',
         deadline_days: {one: '{n} day', other: '{n} days'},
         deadline_scale: '{text} (on a {days}-day scale)',
+        deadline_chain: 'chain, not the certificate',
 
         det_starttls: 'STARTTLS',
+        det_chain_expires_at: 'Chain expires at',
+        det_chain_subject: 'Earliest in the chain',
 
         det_domain: 'Checked domain',
         det_issuer: 'Issuer',
@@ -948,8 +952,11 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
         deadline_today: 'expira hoje',
         deadline_days: {one: '{n} dia', other: '{n} dias'},
         deadline_scale: '{text} (escala de {days} dias)',
+        deadline_chain: 'a cadeia, não o certificado',
 
         det_starttls: 'STARTTLS',
+        det_chain_expires_at: 'Cadeia expira em',
+        det_chain_subject: 'Vence primeiro na cadeia',
 
         det_domain: 'Domínio verificado',
         det_issuer: 'Emissor',
@@ -1377,6 +1384,11 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
 
     var days = isNumber(raw.days_remaining) ? raw.days_remaining : null;
     var expiresAt = validDate(raw.expires_at);
+    // The chain fields only arrive when an intermediate expires before the
+    // leaf. When they do, they — not days_remaining — are what the status was
+    // decided on, so the countdown on screen has to follow them.
+    var chainDays = isNumber(raw.chain_days_remaining) ? raw.chain_days_remaining : null;
+    var chainExpiresAt = validDate(raw.chain_expires_at);
     var error = isText(raw.error) ? raw.error : '';
 
     var status = isText(raw.status) ? String(raw.status).toLowerCase() : '';
@@ -1391,6 +1403,9 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
       valid: raw.valid === true,
       days: days,
       expiresAt: expiresAt,
+      chainDays: chainDays,
+      chainExpiresAt: chainExpiresAt,
+      chainSubject: isText(raw.chain_subject) ? raw.chain_subject : '',
       startTLS: isText(raw.starttls) ? raw.starttls : '',
       issuedAt: validDate(raw.issued_at),
       checkedAt: validDate(raw.checked_at),
@@ -1483,20 +1498,37 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
   }
 
   /**
+   * Whether an intermediate in the chain is what runs out first. The backend
+   * only sends the chain fields in that case, so their presence is the answer.
+   */
+  function chainLeads(it) {
+    return isNumber(it.chainDays) && isNumber(it.days) && it.chainDays < it.days;
+  }
+
+  // The deadline that decided the status, which is the one worth showing.
+  function deadlineDays(it) {
+    return chainLeads(it) ? it.chainDays : it.days;
+  }
+  function deadlineDate(it) {
+    return chainLeads(it) && it.chainExpiresAt ? it.chainExpiresAt : it.expiresAt;
+  }
+
+  /**
    * Whether the row carries a usable deadline. Same condition the "Time left"
    * cell uses, so the ordering never disagrees with what is on screen.
    */
   function hasDeadline(it) {
-    return it.status !== 'error' && isNumber(it.days) && !!it.expiresAt;
+    return it.status !== 'error' && isNumber(deadlineDays(it)) && !!deadlineDate(it);
   }
 
   // Rows with no deadline count as infinitely far away, so they can never
   // displace a real one in the status tie-break.
   function dayValue(it) {
-    return hasDeadline(it) ? it.days : Number.POSITIVE_INFINITY;
+    return hasDeadline(it) ? deadlineDays(it) : Number.POSITIVE_INFINITY;
   }
   function dateValue(it) {
-    return it.expiresAt ? it.expiresAt.getTime() : Number.POSITIVE_INFINITY;
+    var when = deadlineDate(it);
+    return when ? when.getTime() : Number.POSITIVE_INFINITY;
   }
 
   // Subtracting would yield NaN when both sides are Infinity (two rows with no
@@ -1687,12 +1719,15 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
     // Without a readable expiry date there is no trustworthy deadline (common
     // in the v1 format, where expires_at is zeroed and days_remaining is just
     // a marker).
-    if (!isNumber(it.days) || !it.expiresAt) {
+    if (!isNumber(deadlineDays(it)) || !deadlineDate(it)) {
       box.appendChild(make('span', { cls: 'deadline-text deadline-none', text: t('deadline_no_data') }));
       return box;
     }
 
-    var days = it.days;
+    // Not it.days: when the chain expires first, the leaf's own count is not
+    // what put this row in the red, and showing "200 days" next to a critical
+    // badge reads as a bug in the tool.
+    var days = deadlineDays(it);
     var text;
     if (days < 0) text = t('deadline_expired_ago', { n: Math.abs(days) });
     else if (days === 0) text = t('deadline_today');
@@ -1703,6 +1738,9 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
       cls: 'deadline-text' + (highlight ? ' attention' : ''),
       text: text
     }));
+    if (chainLeads(it)) {
+      box.appendChild(make('span', { cls: 'deadline-note', text: t('deadline_chain') }));
+    }
 
     var pct = Math.max(0, Math.min(100, (days / BAR_SCALE_DAYS) * 100));
     var track = make('div', {
@@ -1738,6 +1776,8 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
     pair(t('det_starttls'), it.startTLS);
     if (it.issuedAt) pair(t('det_issued_at'), formatDateTime(it.issuedAt));
     if (it.expiresAt) pair(t('det_expires_at'), formatDateTime(it.expiresAt));
+    if (it.chainExpiresAt) pair(t('det_chain_expires_at'), formatDateTime(it.chainExpiresAt));
+    pair(t('det_chain_subject'), it.chainSubject);
     if (it.checkedAt) pair(t('det_checked_at'), formatDateTime(it.checkedAt));
     if (isNumber(it.duration)) pair(t('det_duration'), formatDuration(it.duration));
     if (isNumber(it.attempts)) {
@@ -2006,6 +2046,9 @@ tr.detail > td { padding: 0; background: var(--surface-3); border-bottom: 1px so
     ['status', function (it) { return it.status; }],
     ['starttls', function (it) { return it.startTLS; }],
     ['days_remaining', function (it) { return isNumber(it.days) ? it.days : ''; }],
+    ['chain_days_remaining', function (it) { return isNumber(it.chainDays) ? it.chainDays : ''; }],
+    ['chain_expires_at', function (it) { return it.chainExpiresAt ? it.chainExpiresAt.toISOString() : ''; }],
+    ['chain_subject', function (it) { return it.chainSubject; }],
     ['expires_at', function (it) { return it.expiresAt ? it.expiresAt.toISOString() : ''; }],
     ['issued_at', function (it) { return it.issuedAt ? it.issuedAt.toISOString() : ''; }],
     ['issuer', function (it) { return it.issuer; }],

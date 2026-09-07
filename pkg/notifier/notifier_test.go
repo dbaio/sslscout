@@ -450,3 +450,32 @@ func TestRenderPlainHasNoMarkup(t *testing.T) {
 		t.Errorf("the group heading is missing:\n%s", text)
 	}
 }
+
+// TestChainLineNamesTheIntermediate: when the chain is what runs out, the alert
+// has to say so. Telling the reader that a certificate with 200 days left
+// "expires in 4 days" sends them to renew the wrong thing.
+func TestChainLineNamesTheIntermediate(t *testing.T) {
+	expires := time.Date(2027, 3, 20, 0, 0, 0, 0, time.UTC)
+	chainExpires := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	chainDays := 4
+
+	r := checker.Result{
+		Domain:             "example.com:443",
+		Status:             checker.StatusCritical,
+		DaysRemaining:      200,
+		ExpiresAt:          &expires,
+		ChainExpiresAt:     &chainExpires,
+		ChainDaysRemaining: &chainDays,
+		ChainSubject:       "Example Intermediate CA",
+	}
+
+	got := line(i18n.For(i18n.EN), r)
+	for _, want := range []string{"chain", "4 days", "2026-09-08", "Example Intermediate CA"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the line %q should mention %q", got, want)
+		}
+	}
+	if strings.Contains(got, "200") {
+		t.Errorf("the line %q should not lead with the leaf's deadline", got)
+	}
+}

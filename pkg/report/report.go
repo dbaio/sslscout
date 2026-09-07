@@ -54,8 +54,10 @@ func Build(results []checker.Result, generatedAt time.Time, duration time.Durati
 		if sa, sb := a.Status.Severity(), b.Status.Severity(); sa != sb {
 			return sa > sb
 		}
-		if a.DaysRemaining != b.DaysRemaining {
-			return a.DaysRemaining < b.DaysRemaining
+		// The effective deadline, not the leaf's: a host whose chain dies in
+		// two days belongs above one whose own certificate dies in ten.
+		if da, db := a.EffectiveDaysRemaining(), b.EffectiveDaysRemaining(); da != db {
+			return da < db
 		}
 		return a.Domain < b.Domain
 	})

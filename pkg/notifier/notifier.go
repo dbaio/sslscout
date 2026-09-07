@@ -115,6 +115,12 @@ func line(p i18n.Printer, r checker.Result) string {
 	case checker.StatusInvalid:
 		return p.LineInvalid(r.Domain, string(r.ErrorKind), r.Subject)
 	default: // critical / warning
+		// When the chain is what is running out, saying "expires in 4 days"
+		// about a leaf that has 200 left sends the reader to renew the wrong
+		// certificate.
+		if r.ChainExpiresAt != nil && r.ChainDaysRemaining != nil {
+			return p.LineExpiringChain(r.Domain, *r.ChainDaysRemaining, p.Date(*r.ChainExpiresAt), r.ChainSubject)
+		}
 		return p.LineExpiring(r.Domain, r.DaysRemaining, date)
 	}
 }

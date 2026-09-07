@@ -3,6 +3,7 @@
 package checker
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -43,6 +44,13 @@ type Result struct {
 	DNSNames      []string   `json:"dns_names,omitempty"`
 	TLSVersion    string     `json:"tls_version,omitempty"`
 	CipherSuite   string     `json:"cipher_suite,omitempty"`
+	// The chain fields appear together, and only when an intermediate the
+	// server sent expires BEFORE the leaf. That is the case worth a field:
+	// nothing in the leaf's own dates hints at it, and when the intermediate
+	// goes, the site goes with it.
+	ChainExpiresAt     *time.Time `json:"chain_expires_at,omitempty"`
+	ChainDaysRemaining *int       `json:"chain_days_remaining,omitempty"`
+	ChainSubject       string     `json:"chain_subject,omitempty"`
 	// MetadataInsecure marks that the certificate fields above came from a
 	// handshake WITHOUT verification (the golden-rule diagnostic pass), not
 	// from the verified connection. They are data to investigate the problem,
@@ -250,18 +258,30 @@ func (r *Result) applyCertificate(state tls.ConnectionState, opts Options) {
 	}
 	r.applyMetadata(state, opts)
 
-	switch {
-	case r.DaysRemaining < 0:
+	// The thresholds run against the whole chain, not just the leaf: a site
+	// whose intermediate dies in three days is in trouble in three days,
+	// however far away its own certificate looks.
+	switch days := r.EffectiveDaysRemaining(); {
+	case days < 0:
 		// Defensive: verification passed, so this is a clock race.
 		r.Status = StatusExpired
 		r.ErrorKind = KindExpired
-	case r.DaysRemaining <= opts.CriticalThresholdDays:
+	case days <= opts.CriticalThresholdDays:
 		r.Status = StatusCritical
-	case r.DaysRemaining <= opts.AlertThresholdDays:
+	case days <= opts.AlertThresholdDays:
 		r.Status = StatusWarning
 	default:
 		r.Status = StatusOK
 	}
+}
+
+// EffectiveDaysRemaining is the deadline that actually matters: the leaf's,
+// unless an intermediate in the chain expires first.
+func (r Result) EffectiveDaysRemaining() int {
+	if r.ChainDaysRemaining != nil && *r.ChainDaysRemaining < r.DaysRemaining {
+		return *r.ChainDaysRemaining
+	}
+	return r.DaysRemaining
 }
 
 // applyMetadata copies the leaf certificate data into the Result.
@@ -287,6 +307,45 @@ func (r *Result) applyMetadata(state tls.ConnectionState, opts Options) {
 	if state.CipherSuite != 0 {
 		r.CipherSuite = tls.CipherSuiteName(state.CipherSuite)
 	}
+	r.applyChain(state, opts)
+}
+
+// applyChain records the earliest expiry among the intermediates the server
+// sent, and only when it falls before the leaf's.
+//
+// This is the failure that took half the web down when AddTrust and DST Root X3
+// went: every leaf was months from expiring, and every leaf was useless. A
+// checker that reads PeerCertificates[0] and stops cannot see it coming.
+func (r *Result) applyChain(state tls.ConnectionState, opts Options) {
+	if len(state.PeerCertificates) < 2 {
+		return
+	}
+	leaf := state.PeerCertificates[0]
+
+	var earliest *x509.Certificate
+	for _, cert := range state.PeerCertificates[1:] {
+		// A self-signed certificate this far down the chain is the root, which
+		// servers send out of habit. Ignore it: trust comes from the local
+		// store, and the copy that counts is the one there, with its own dates.
+		if bytes.Equal(cert.RawIssuer, cert.RawSubject) {
+			continue
+		}
+		if !cert.NotAfter.Before(leaf.NotAfter) {
+			continue
+		}
+		if earliest == nil || cert.NotAfter.Before(earliest.NotAfter) {
+			earliest = cert
+		}
+	}
+	if earliest == nil {
+		return
+	}
+
+	expires := earliest.NotAfter.UTC()
+	days := daysRemaining(opts.Now(), earliest.NotAfter)
+	r.ChainExpiresAt = &expires
+	r.ChainDaysRemaining = &days
+	r.ChainSubject = subjectName(earliest)
 }
 
 // refineCertStatus uses the diagnostic metadata to tell "expired" apart from
