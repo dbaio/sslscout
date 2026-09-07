@@ -832,10 +832,12 @@ The `<Files>` block requires the `headers` module
 The workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml)
 builds SSLScout on the runner, runs the check with `-notify=false`, and
 publishes the `public/` directory to GitHub Pages. It runs on demand
-(`workflow_dispatch`) and once a day.
+(`workflow_dispatch`) and once a week.
 
 To enable it: **Settings → Pages → Build and deployment → Source: GitHub
-Actions**.
+Actions**. The `Configure Pages` step also passes `enablement: true`, so the
+first run creates the Pages site by itself if that setting was never saved —
+without it the run fails with `Get Pages site failed … Not Found`.
 
 > **Warning:** in a public repository the published dashboard is public, and so
 > is your domain list. Do not use Pages for an internal fleet.
