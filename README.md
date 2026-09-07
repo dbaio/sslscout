@@ -13,11 +13,17 @@ reads that JSON and shows the state of the fleet.
 Both the dashboard and the alerts are translatable. They ship in English and
 also come with Brazilian Portuguese — see [Languages](#languages-i18n).
 
+**Live preview: <https://dbaio.github.io/sslscout/>** — the dashboard running
+against this repository's own `domains.txt`, so you can click through it before
+installing anything. It is a preview of the interface only, not a service; see
+[Live preview](#live-preview).
+
 ---
 
 ## Table of contents
 
 - [Dashboard](#dashboard)
+  - [Live preview](#live-preview)
 - [Requirements](#requirements)
 - [Install and build](#install-and-build)
 - [Quick start](#quick-start)
@@ -62,6 +68,30 @@ direction. All of it happens in the browser, so the ordering inside
 
 Because it is a static file, anything can serve it: the built-in `-serve` mode,
 nginx, Apache, GitHub Pages or an object bucket.
+
+### Live preview
+
+**<https://dbaio.github.io/sslscout/>**
+
+A real dashboard, published from this repository by
+[`.github/workflows/pages.yml`](#github-pages). It exists so you can see the
+interface without building anything — it is **a preview only**, not a service,
+and not somewhere to monitor your own certificates:
+
+- The data comes from the `domains.txt` committed here: a handful of public
+  hosts, three of them from [badssl.com](https://badssl.com) that are
+  *deliberately* expired, name-mismatched and self-signed. That way every
+  status the dashboard can render is on screen at once — the red rows are the
+  demo working, not something breaking.
+- It is regenerated once a week, while the dashboard flags any report older
+  than 24 h — so the preview almost always wears a **Report out of date**
+  badge. That is the badge doing its job on a weekly demo, not a failure. Your
+  own instance refreshes as often as you schedule it.
+- Nothing on the page is configurable and nothing you do there is stored: you
+  cannot add a domain to it.
+
+To watch your own fleet, run SSLScout yourself — [Quick start](#quick-start)
+takes about a minute.
 
 ---
 
@@ -838,6 +868,8 @@ To enable it: **Settings → Pages → Build and deployment → Source: GitHub
 Actions**. The `Configure Pages` step also passes `enablement: true`, so the
 first run creates the Pages site by itself if that setting was never saved —
 without it the run fails with `Get Pages site failed … Not Found`.
+
+This is exactly how <https://dbaio.github.io/sslscout/> is published.
 
 > **Warning:** in a public repository the published dashboard is public, and so
 > is your domain list. Do not use Pages for an internal fleet.
